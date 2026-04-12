@@ -1,0 +1,128 @@
+{{define "content"}}
+{{with .Data}}
+{{$days := .Days}}{{$allStatuses := .Statuses}}{{$presences := .Presences}}{{$uid := .CurrentUserID}}
+<div class="max-w-full mx-auto px-2 sm:px-4 lg:px-6"
+     x-data="calendarApp({{json .Statuses}}, {{.CurrentUserID}}, true)">
+
+    <!-- Header bar -->
+    <div class="flex items-center gap-2 mb-4">
+        <a href="/?year={{.PrevYear}}&month={{.PrevMonth}}"
+           class="p-2 rounded-lg bg-white shadow hover:bg-gray-50 transition">
+            <svg class="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+            </svg>
+        </a>
+        <h2 class="text-xl sm:text-2xl font-bold text-gray-800 min-w-[200px] text-center">
+            {{.MonthName}} {{.Year}}
+        </h2>
+        <a href="/?year={{.NextYear}}&month={{.NextMonth}}"
+           class="p-2 rounded-lg bg-white shadow hover:bg-gray-50 transition">
+            <svg class="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+            </svg>
+        </a>
+    </div>
+
+    <!-- Legend -->
+    <div class="flex flex-wrap gap-2 mb-3">
+        {{range .Statuses}}
+        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium text-white shadow-sm"
+              style="background-color: {{.Color}}">
+            {{.Name}}
+            {{if .Billable}}<span class="opacity-75">€</span>{{end}}
+        </span>
+        {{end}}
+        <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-gray-200 text-gray-600">
+            Not set
+        </span>
+    </div>
+
+    <!-- Calendar Table -->
+    <div class="bg-white rounded-xl shadow-lg overflow-x-auto">
+        <table class="w-full table-fixed border-collapse">
+            <thead>
+                <tr class="bg-gray-50">
+                    {{range $days}}
+                    <th class="px-0 py-2 text-center text-xs font-medium border-b border-gray-200
+                        {{if or .IsWeekend .IsHoliday}}bg-gray-100 text-gray-400{{else}}text-gray-500{{end}}"
+                        {{if .IsHoliday}}title="{{.HolidayName}}"{{end}}>
+                        <div>{{.DayName}}</div>
+                        <div class="font-bold {{if or .IsWeekend .IsHoliday}}text-gray-400{{else}}text-gray-700{{end}}">{{.Day}}</div>
+                        {{if .IsHoliday}}<div class="text-[9px] text-amber-500 leading-none truncate px-0.5">🎌</div>{{end}}
+                    </th>
+                    {{end}}
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    {{range $days}}
+                    <td class="px-0 py-0 border-b border-gray-100 select-none calendar-cell
+                        {{if or .IsWeekend (and .IsHoliday (not .HolidayAllowImputed))}}bg-gray-50/80 cursor-not-allowed{{else}}cursor-pointer{{end}}"
+                        data-user-id="{{$uid}}"
+                        data-date="{{.Date}}"
+                        data-weekend="{{.IsWeekend}}"
+                        data-holiday="{{.IsHoliday}}"
+                        data-holiday-allow-imputed="{{.HolidayAllowImputed}}"
+                        @mousedown.prevent="startSelect({{$uid}}, '{{.Date}}')"
+                        @mouseenter="extendSelect({{$uid}}, '{{.Date}}')"
+                        @touchstart.prevent="startSelect({{$uid}}, '{{.Date}}')"
+                        @touchmove.prevent="handleTouchMove($event)">
+                        {{if hasKey $presences .Date}}
+                        <div class="w-full h-10 transition-all"
+                             :class="isSelected({{$uid}}, '{{.Date}}') ? 'ring-2 ring-primary ring-inset' : ''"
+                             style="background-color: {{statusColor $allStatuses (getKey $presences .Date)}}; opacity: {{if .IsWeekend}}0.6{{else}}1{{end}}"
+                             title="{{statusName $allStatuses (getKey $presences .Date)}}">
+                        </div>
+                        {{else}}
+                        <div class="w-full h-10 transition-all
+                            {{if or .IsWeekend .IsHoliday}}bg-gray-100{{else}}hover:bg-gray-100{{end}}"
+                             :class="isSelected({{$uid}}, '{{.Date}}') ? 'ring-2 ring-primary ring-inset bg-primary/10' : ''"
+                             {{if and .IsHoliday (not .IsWeekend)}}title="{{.HolidayName}}"{{end}}>
+                        </div>
+                        {{end}}
+                    </td>
+                    {{end}}
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Status picker modal -->
+    <div x-show="showPicker"
+         x-transition:enter="transition ease-out duration-200"
+         x-transition:enter-start="opacity-0 scale-95"
+         x-transition:enter-end="opacity-100 scale-100"
+         x-transition:leave="transition ease-in duration-100"
+         x-transition:leave-start="opacity-100 scale-100"
+         x-transition:leave-end="opacity-0 scale-95"
+         @click.away="cancelSelect()"
+         class="fixed z-50 bg-white rounded-2xl shadow-2xl border border-gray-200 p-4 min-w-[240px]"
+         :style="'top: ' + pickerY + 'px; left: ' + pickerX + 'px'">
+        <p class="text-sm font-semibold text-gray-700 mb-3">
+            <span x-text="selectedDates.length"></span> day(s) selected
+        </p>
+        <div class="space-y-1.5">
+            <template x-for="status in statuses" :key="status.id">
+                <button @click="applyStatus(status.id)"
+                        class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-white text-sm font-medium hover:opacity-90 transition"
+                        :style="'background-color: ' + status.color">
+                    <span x-text="status.name"></span>
+                    <template x-if="status.billable">
+                        <span class="ml-auto text-xs opacity-75">€</span>
+                    </template>
+                </button>
+            </template>
+            <button @click="clearStatus()"
+                    class="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-200 text-gray-700 text-sm font-medium hover:bg-gray-300 transition">
+                Clear
+            </button>
+            <button @click="cancelSelect()"
+                    class="w-full px-3 py-2 rounded-lg text-gray-400 text-xs hover:text-gray-500 transition">
+                Cancel
+            </button>
+        </div>
+    </div>
+
+</div>
+{{end}}
+{{end}}

@@ -1,0 +1,90 @@
+{{define "content"}}
+{{with .Data}}
+{{$allRoles := .AllRoles}}{{$users := .Users}}
+<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8" x-data="rolesAdmin()">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">🔑 Roles</h1>
+    </div>
+
+    <div class="bg-white rounded-xl shadow-md overflow-x-auto">
+        <table class="w-full border-collapse">
+            <thead>
+                <tr class="bg-gray-50">
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase border-b border-gray-200">
+                        User
+                    </th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase border-b border-gray-200">
+                        Email
+                    </th>
+                    {{range $allRoles}}
+                    <th class="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase border-b border-gray-200 min-w-[100px]">
+                        {{.Label}}
+                    </th>
+                    {{end}}
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+                {{range $user := $users}}
+                <tr class="hover:bg-gray-50 transition">
+                    <td class="px-4 py-3 text-sm font-medium text-gray-800">
+                        <div class="flex items-center gap-2">
+                            <div class="h-7 w-7 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">
+                                {{slice .Name 0 1}}
+                            </div>
+                            {{.Name}}
+                        </div>
+                    </td>
+                    <td class="px-4 py-3 text-sm text-gray-500">{{.Email}}</td>
+                    {{range $allRoles}}
+                    <td class="px-3 py-3 text-center">
+                        <input type="checkbox"
+                               {{if $user.HasRole .ID}}checked{{end}}
+                               onchange="updateRole({{$user.ID}}, '{{.ID}}', this.checked)"
+                               class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary cursor-pointer">
+                    </td>
+                    {{end}}
+                </tr>
+                {{end}}
+            </tbody>
+        </table>
+        {{if not $users}}
+        <div class="p-8 text-center text-gray-400">No users</div>
+        {{end}}
+    </div>
+</div>
+
+<script>
+function rolesAdmin() {
+    return {};
+}
+
+async function updateRole(userId, roleId, checked) {
+    const row = event.target.closest('tr');
+    const checkboxes = row.querySelectorAll('input[type="checkbox"]');
+    const roleIds = {{json $allRoles}};
+    const roles = [];
+    checkboxes.forEach((cb, i) => {
+        if (cb.checked) {
+            roles.push(roleIds[i].ID);
+        }
+    });
+
+    try {
+        const resp = await fetch(`/api/users/${userId}/roles`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ roles })
+        });
+        if (!resp.ok) {
+            const data = await resp.json();
+            alert(data.error || 'Error');
+            event.target.checked = !checked;
+        }
+    } catch (e) {
+        alert('Connection error');
+        event.target.checked = !checked;
+    }
+}
+</script>
+{{end}}
+{{end}}

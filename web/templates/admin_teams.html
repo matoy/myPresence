@@ -1,0 +1,125 @@
+{{define "content"}}
+{{with .Data}}
+{{$allUsers := .Users}}
+{{$canManageTeams := .CanManageTeams}}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8" x-data="teamsAdmin()">
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold text-gray-900">👥 Teams</h1>
+    </div>
+
+    <!-- Create Team Form -->
+    {{if $canManageTeams}}
+    <div class="bg-white rounded-xl shadow-md p-6 mb-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">Create a team</h2>
+        <form method="POST" action="/admin/teams" class="flex gap-3">
+            <input type="text" name="name" placeholder="Team name" required
+                   class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary">
+            <button type="submit"
+                    class="px-6 py-2 bg-primary text-white rounded-lg font-medium hover:opacity-90 transition">
+                Create
+            </button>
+        </form>
+    </div>
+    {{end}}
+
+    <!-- Teams List -->
+    {{range $teamItem := .Teams}}
+    <div class="bg-white rounded-xl shadow-md p-6 mb-4" x-data="{ editName: false, showAddMember: false }">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-3">
+                <div class="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <span class="text-primary font-bold">{{slice .Team.Name 0 1}}</span>
+                </div>
+                <template x-if="!editName">
+                    <h3 class="text-lg font-semibold text-gray-800">{{.Team.Name}}</h3>
+                </template>
+                <template x-if="editName">
+                    <input type="text" x-ref="editInput" value="{{.Team.Name}}"
+                           @keydown.enter="renameTeam({{.Team.ID}}, $el.value); editName = false"
+                           @keydown.escape="editName = false"
+                           class="px-3 py-1 border border-gray-300 rounded-lg text-lg font-semibold">
+                </template>
+            </div>
+            <div class="flex items-center gap-2">
+                {{if $canManageTeams}}
+                <button @click="editName = !editName; $nextTick(() => $refs.editInput?.focus())"
+                        class="p-2 text-gray-400 hover:text-gray-600 transition" title="Rename">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                    </svg>
+                </button>
+                {{end}}
+                {{if $teamItem.CanEdit}}
+                <button @click="showAddMember = !showAddMember"
+                        class="p-2 text-green-500 hover:text-green-700 transition" title="Add member">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                </button>
+                {{end}}
+                {{if $canManageTeams}}
+                <button @click="if(confirm('Delete this team?')) deleteTeam({{.Team.ID}})"
+                        class="p-2 text-red-400 hover:text-red-600 transition" title="Delete">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                </button>
+                {{end}}
+            </div>
+        </div>
+
+        <!-- Add Member -->
+        {{if $teamItem.CanEdit}}
+        <div x-show="showAddMember" x-transition class="mb-4 p-3 bg-green-50 rounded-lg">
+            <select x-ref="memberSelect" class="px-3 py-2 border border-gray-300 rounded-lg text-sm mr-2">
+                {{range $allUsers}}
+                <option value="{{.ID}}">{{.Name}} ({{.Email}})</option>
+                {{end}}
+            </select>
+            <button @click="addMember({{.Team.ID}}, $refs.memberSelect.value); showAddMember = false"
+                    class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
+                Add
+            </button>
+        </div>
+        {{end}}
+
+        <!-- Members -->
+        <div class="space-y-2">
+            {{if .Members}}
+            {{range .Members}}
+            <div class="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                <div class="flex items-center gap-2">
+                    <div class="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-xs font-bold text-primary">
+                        {{slice .Name 0 1}}
+                    </div>
+                    <div>
+                        <span class="text-sm font-medium text-gray-800">{{.Name}}</span>
+                        <span class="text-xs text-gray-500 ml-2">{{.Email}}</span>
+                    </div>
+                    {{if .HasRole "global"}}
+                    <span class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Global</span>
+                    {{end}}
+                </div>
+                <button @click="removeMember({{$teamItem.Team.ID}}, {{.ID}})"
+                        class="text-red-400 hover:text-red-600 transition p-1 {{if not $teamItem.CanEdit}}hidden{{end}}" title="Remove">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+            {{end}}
+            {{else}}
+            <p class="text-sm text-gray-400 italic py-2">No members in this team</p>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+
+    {{if not .Teams}}
+    <div class="bg-gray-50 rounded-xl p-8 text-center">
+        <p class="text-gray-500">No teams yet. Create one using the form above.</p>
+    </div>
+    {{end}}
+</div>
+{{end}}
+{{end}}

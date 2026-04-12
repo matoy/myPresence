@@ -1,0 +1,154 @@
+# =============================================================================
+# Docker Compose - Presence App
+# =============================================================================
+#
+# Quick start:
+#   docker compose up -d --build
+#
+# The application will be available at: http://localhost:8080
+# Default admin login: admin / admin
+#
+# =============================================================================
+
+services:
+  presence:
+    build: .
+    container_name: presence-app
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      # Persistent volume for the SQLite database and files
+      # Contains: app.db (database), logo.png (optional)
+      - presence-data:/data
+    environment:
+      # =====================================================================
+      # GENERAL CONFIGURATION
+      # =====================================================================
+
+      # Internal listening port (external mapping is set in 'ports' above)
+      - PORT=8080
+
+      # Data storage directory (inside the container)
+      - DATA_DIR=/data
+
+      # Secret key used to sign session cookies
+      # ⚠️  IMPORTANT: Change this value in production!
+      # Generate a random key with: openssl rand -hex 32
+      - SECRET_KEY=change-me-in-production-use-random-32-chars
+
+      # =====================================================================
+      # BRANDING
+      # =====================================================================
+
+      # Application name (displayed in the header and login page)
+      - APP_NAME=Presence
+
+      # UI colors (hexadecimal format)
+      # PrimaryColor: main color (header, buttons, links)
+      - PRIMARY_COLOR=#3b82f6
+
+      # SecondaryColor: secondary color (header gradient)
+      - SECONDARY_COLOR=#1e40af
+
+      # AccentColor: accent color (badges, highlights)
+      - ACCENT_COLOR=#f59e0b
+
+      # Custom logo
+      # To add your logo:
+      #   1. Copy your logo.png into the Docker volume
+      #      Example: docker cp my-logo.png presence-app:/data/logo.png
+      #   2. Or mount it directly below
+      # - LOGO_PATH=logo.png
+
+      # =====================================================================
+      # LOCAL AUTHENTICATION (ADMIN)
+      # =====================================================================
+
+      # Local administrator credentials
+      # This account has access to the back-office (teams, statuses, activity report)
+      - ADMIN_USER=admin
+      - ADMIN_PASSWORD=admin
+
+      # =====================================================================
+      # SAML2 / SSO AUTHENTICATION (Microsoft Entra ID)
+      # =====================================================================
+      #
+      # To enable SSO authentication with Microsoft Entra ID:
+      #
+      # ── STEP 1: Create the application in Entra ID ──
+      #
+      #   1. Sign in to the Azure portal: https://portal.azure.com
+      #   2. Go to "Microsoft Entra ID" > "Enterprise applications"
+      #   3. Click "+ New application"
+      #   4. Choose "Create your own application"
+      #   5. Name it (e.g. "Presence App") and select
+      #      "Integrate any other application you don't find in the gallery"
+      #   6. Click "Create"
+      #
+      # ── STEP 2: Configure SAML SSO in Entra ID ──
+      #
+      #   1. In the created application, go to "Single sign-on"
+      #   2. Choose "SAML"
+      #   3. In "Basic SAML Configuration":
+      #      - Identifier (Entity ID): https://your-domain.com/saml/metadata
+      #      - Reply URL (ACS URL):    https://your-domain.com/saml/acs
+      #      - Sign-on URL:            https://your-domain.com/saml/login
+      #   4. In "Attributes & Claims", verify that these claims are present:
+      #      - emailaddress -> user.mail
+      #      - displayname  -> user.displayname
+      #   5. In "SAML Signing Certificate", copy
+      #      the "App Federation Metadata URL"
+      #
+      # ── STEP 3: Assign users ──
+      #
+      #   1. Go to "Users and groups"
+      #   2. Add the users or groups that should have access to the application
+      #
+      # ── STEP 4: Configure the variables below ──
+      #
+      #   Uncomment and fill in the following variables:
+      #
+
+      # IdP metadata URL (copied from step 2.5)
+      # Example: https://login.microsoftonline.com/{tenant-id}/federationmetadata/2007-06/federationmetadata.xml?appid={app-id}
+      # - SAML_IDP_METADATA_URL=
+
+      # SP Entity ID (must match the Identifier configured in Entra ID)
+      # Example: https://presence.your-domain.com/saml/metadata
+      # - SAML_ENTITY_ID=
+
+      # Public URL of your application (no trailing slash)
+      # Example: https://presence.your-domain.com
+      # - SAML_ROOT_URL=
+
+      # SP certificate (optional - a self-signed certificate is generated if not provided)
+      # To provide your own certificate:
+      #   1. Place the PEM files in the Docker volume
+      #   2. Uncomment the following lines
+      # - SAML_SP_CERT_FILE=/data/saml/sp-cert.pem
+      # - SAML_SP_KEY_FILE=/data/saml/sp-key.pem
+
+volumes:
+  presence-data:
+    driver: local
+
+# =============================================================================
+# NOTES
+# =============================================================================
+#
+# To mount a custom logo directly:
+#   volumes:
+#     - presence-data:/data
+#     - ./my-logo.png:/data/logo.png:ro
+#
+# To access the SQLite database:
+#   docker exec -it presence-app cat /data/app.db > backup.db
+#
+# To view logs:
+#   docker compose logs -f presence
+#
+# To restart after a config change:
+#   docker compose down && docker compose up -d
+#
+# =============================================================================

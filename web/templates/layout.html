@@ -1,0 +1,138 @@
+{{define "layout"}}
+<!DOCTYPE html>
+<html lang="fr" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{(index .Config "AppName")}}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="/static/css/app.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '{{(index .Config "PrimaryColor")}}',
+                        secondary: '{{(index .Config "SecondaryColor")}}',
+                        accent: '{{(index .Config "AccentColor")}}',
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="h-full bg-gray-50">
+    {{if .User}}
+    <!-- Navigation -->
+    <nav class="bg-gradient-to-r from-primary to-secondary shadow-lg" x-data="{ mobileMenu: false }">
+        <div class="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <!-- Logo + App Name -->
+                <div class="flex items-center space-x-3">
+                    {{if (index .Config "LogoURL")}}
+                    <img src="{{(index .Config "LogoURL")}}" alt="Logo" class="h-8 w-8 rounded">
+                    {{else}}
+                    <div class="h-8 w-8 bg-white/20 rounded flex items-center justify-center">
+                        <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                        </svg>
+                    </div>
+                    {{end}}
+                    <a href="/" class="text-white font-bold text-lg">{{(index .Config "AppName")}}</a>
+                </div>
+
+                <!-- Desktop nav links -->
+                <div class="hidden md:flex items-center space-x-4">
+                    <a href="/" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "calendar"}}bg-white/20 text-white{{end}}">
+                        📅 Calendar
+                    </a>
+                    {{if .User.HasRole "team_manager"}}
+                    <a href="/admin/teams" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_teams"}}bg-white/20 text-white{{end}}">
+                        👥 Teams
+                    </a>
+                    {{else if .User.HasRole "team_leader"}}
+                    <a href="/admin/teams" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_teams"}}bg-white/20 text-white{{end}}">
+                        👥 Teams
+                    </a>
+                    {{end}}
+                    {{if .User.HasRole "activity_viewer"}}
+                    <a href="/admin/activity" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_activity"}}bg-white/20 text-white{{end}}">
+                        📋 Activity Report
+                    </a>
+                    {{else if .User.HasRole "team_leader"}}
+                    <a href="/admin/activity" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_activity"}}bg-white/20 text-white{{end}}">
+                        📋 Activity Report
+                    </a>
+                    {{end}}
+                    {{if .User.HasRole "status_manager"}}
+                    <a href="/admin/statuses" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_statuses"}}bg-white/20 text-white{{end}}">
+                        🏷️ Statuses
+                    </a>
+                    {{end}}
+                    {{if .User.HasRole "global"}}
+                    <a href="/admin/holidays" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_holidays"}}bg-white/20 text-white{{end}}">
+                        🎌 Holidays
+                    </a>
+                    <a href="/admin/users" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_users"}}bg-white/20 text-white{{end}}">
+                        👤 Users &amp; Roles
+                    </a>
+                    {{end}}
+                    <div class="border-l border-white/30 pl-4 flex items-center space-x-3">
+                        <span class="text-white/80 text-sm">{{.User.Name}}</span>
+                        {{if .User.HasRole "global"}}
+                        <span class="bg-accent text-white text-xs px-2 py-0.5 rounded-full">Global</span>
+                        {{end}}
+                        <a href="/logout" class="text-white/60 hover:text-white text-sm transition">Sign out</a>
+                    </div>
+                </div>
+
+                <!-- Mobile menu button -->
+                <button @click="mobileMenu = !mobileMenu" class="md:hidden text-white">
+                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path x-show="!mobileMenu" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                        <path x-show="mobileMenu" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Mobile menu -->
+        <div x-show="mobileMenu" x-transition class="md:hidden bg-primary/95 border-t border-white/10">
+            <div class="px-4 py-3 space-y-2">
+                <a href="/" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">📅 Calendar</a>
+                {{if .User.HasRole "team_manager"}}
+                <a href="/admin/teams" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">👥 Teams</a>
+                {{else if .User.HasRole "team_leader"}}
+                <a href="/admin/teams" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">👥 Teams</a>
+                {{end}}
+                {{if .User.HasRole "activity_viewer"}}
+                <a href="/admin/activity" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">📋 Activity Report</a>
+                {{else if .User.HasRole "team_leader"}}
+                <a href="/admin/activity" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">📋 Activity Report</a>
+                {{end}}
+                {{if .User.HasRole "status_manager"}}
+                <a href="/admin/statuses" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">🏷️ Statuses</a>
+                {{end}}
+                {{if .User.HasRole "global"}}
+                <a href="/admin/holidays" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">🎌 Holidays</a>
+                <a href="/admin/users" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">👤 Users &amp; Roles</a>
+                {{end}}
+                <div class="border-t border-white/20 pt-2 mt-2">
+                    <span class="block text-white/60 text-sm px-3">{{.User.Name}}</span>
+                    <a href="/logout" class="block text-white/60 hover:text-white px-3 py-2 text-sm">Déconnexion</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+    {{end}}
+
+    <!-- Main content -->
+    <main class="{{if .User}}py-4{{end}}">
+        {{template "content" .}}
+    </main>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
+{{end}}
