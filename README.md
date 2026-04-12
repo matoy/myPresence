@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Presence App
 
 <!-- Replace YOUR_GITHUB_USERNAME/myPresence and YOUR_DOCKERHUB_USERNAME with actual values -->
@@ -210,3 +211,6 @@ Templates and static files are embedded (`//go:embed`) into the binary at build 
 ```bash
 docker compose down && docker compose up -d --build
 ```
+=======
+# myPresence
+>>>>>>> 14065b196b4edee9e6b2e85dfccf405f02a5f0f4
