@@ -1,11 +1,11 @@
 <<<<<<< HEAD
 # Presence App
 
-<!-- Replace YOUR_GITHUB_USERNAME/myPresence and YOUR_DOCKERHUB_USERNAME with actual values -->
-[![CI](https://github.com/YOUR_GITHUB_USERNAME/myPresence/actions/workflows/ci.yml/badge.svg)](https://github.com/YOUR_GITHUB_USERNAME/myPresence/actions/workflows/ci.yml)
-[![Release](https://github.com/YOUR_GITHUB_USERNAME/myPresence/actions/workflows/release.yml/badge.svg)](https://github.com/YOUR_GITHUB_USERNAME/myPresence/actions/workflows/release.yml)
-[![Docker Pulls](https://img.shields.io/docker/pulls/YOUR_DOCKERHUB_USERNAME/mypresence)](https://hub.docker.com/r/YOUR_DOCKERHUB_USERNAME/mypresence)
-[![Docker Image Size](https://img.shields.io/docker/image-size/YOUR_DOCKERHUB_USERNAME/mypresence/latest)](https://hub.docker.com/r/YOUR_DOCKERHUB_USERNAME/mypresence)
+<!-- Replace matoy/myPresence and matoy with actual values -->
+[![CI](https://github.com/matoy/myPresence/actions/workflows/ci.yml/badge.svg)](https://github.com/matoy/myPresence/actions/workflows/ci.yml)
+[![Release](https://github.com/matoy/myPresence/actions/workflows/release.yml/badge.svg)](https://github.com/matoy/myPresence/actions/workflows/release.yml)
+[![Docker Pulls](https://img.shields.io/docker/pulls/matoy/mypresence)](https://hub.docker.com/r/matoy/mypresence)
+[![Docker Image Size](https://img.shields.io/docker/image-size/matoy/mypresence/latest)](https://hub.docker.com/r/matoy/mypresence)
 [![Go Version](https://img.shields.io/badge/go-1.23-00ADD8?logo=go)](https://golang.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
