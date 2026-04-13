@@ -10,18 +10,22 @@ RUN apk add --no-cache git ca-certificates
 
 WORKDIR /build
 
+# Bypass corporate proxy TLS issues
+ENV GONOSUMDB=*
+ENV GOINSECURE=*
+ENV GOPRIVATE=*
+ENV GOPROXY=direct
+ENV GIT_SSL_NO_VERIFY=true
+
 # Copy go.mod first for dependency caching
-COPY go.mod ./
+COPY go.mod go.sum* ./
 RUN go mod download 2>/dev/null || true
 
 # Copy all source
 COPY . .
 
-# Resolve dependencies (generates go.sum if needed)
-RUN go mod tidy
-
 # Build static binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app .
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=mod -ldflags="-s -w" -o /app .
 
 # --- Stage 2: Runtime ---
 FROM alpine:3.19
