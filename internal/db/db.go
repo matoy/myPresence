@@ -191,7 +191,7 @@ func (d *DB) SeedDefaults(adminUser, adminPass string) error {
 		}{
 			{"Présent sur site", "#22c55e", true, true, 1},
 			{"Télétravail", "#a855f7", true, false, 2},
-			{"Déplacement", "#3b82f6", true, false, 3},
+			{"Déplacement", "#3b82f6", true, true, 3},
 			{"Congé", "#f97316", false, false, 4},
 			{"Maladie", "#ef4444", false, false, 5},
 			{"Formation", "#eab308", false, false, 6},
