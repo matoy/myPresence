@@ -12,7 +12,8 @@
 
 services:
   presence:
-    build: .
+    #build: .
+    image: matoy/mypresence:latest
     container_name: presence-app
     restart: unless-stopped
     ports:
@@ -20,7 +21,8 @@ services:
     volumes:
       # Persistent volume for the SQLite database and files
       # Contains: app.db (database), logo.png (optional)
-      - presence-data:/data
+      # - presence-data:/data
+      - ./mypresence-data:/data
     environment:
       # =====================================================================
       # GENERAL CONFIGURATION
@@ -42,17 +44,17 @@ services:
       # =====================================================================
 
       # Application name (displayed in the header and login page)
-      - APP_NAME=Presence
+      - APP_NAME=My Presence
 
       # UI colors (hexadecimal format)
       # PrimaryColor: main color (header, buttons, links)
-      - PRIMARY_COLOR=#3b82f6
+      - PRIMARY_COLOR=#06532A
 
       # SecondaryColor: secondary color (header gradient)
-      - SECONDARY_COLOR=#1e40af
+      - SECONDARY_COLOR=#082415
 
       # AccentColor: accent color (badges, highlights)
-      - ACCENT_COLOR=#f59e0b
+      - ACCENT_COLOR=#81C071
 
       # Custom logo
       # To add your logo:
@@ -71,7 +73,7 @@ services:
 
       # CSS font-family for the main UI text
       # Must match a font loaded by FONT_URL
-      # - FONT_FAMILY='Inter', ui-sans-serif, system-ui, sans-serif
+      # - FONT_FAMILY='Mona Sans', sans-serif
 
       # CSS font-family for monospaced text (dates, codes, etc.)
       # - FONT_FAMILY_MONO='JetBrains Mono', ui-monospace, monospace
@@ -151,9 +153,9 @@ services:
       # - SAML_SP_CERT_FILE=/data/saml/sp-cert.pem
       # - SAML_SP_KEY_FILE=/data/saml/sp-key.pem
 
-volumes:
-  presence-data:
-    driver: local
+#volumes:
+#  presence-data:
+#    driver: local
 
 # =============================================================================
 # NOTES
