@@ -171,4 +171,6 @@ type PageData struct {
 	Flash       string
 	Data        interface{}
 	SAMLEnabled bool
+	HideFooter  bool
+	AppVersion  string
 }

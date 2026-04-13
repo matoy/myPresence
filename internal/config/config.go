@@ -16,6 +16,10 @@ type Config struct {
 	AccentColor    string
 	LogoPath       string
 
+	// Footer
+	AppVersion string
+	HideFooter bool
+
 	// Local admin auth
 	AdminUser     string
 	AdminPassword string
@@ -42,6 +46,9 @@ func Load() *Config {
 		AccentColor:    getEnv("ACCENT_COLOR", "#f59e0b"),
 		LogoPath:       getEnv("LOGO_PATH", ""),
 
+		AppVersion: getEnv("APP_VERSION", "dev"),
+		HideFooter: getEnvBool("HIDE_FOOTER", false),
+
 		AdminUser:     getEnv("ADMIN_USER", "admin"),
 		AdminPassword: getEnv("ADMIN_PASSWORD", "admin"),
 
@@ -58,6 +65,17 @@ func Load() *Config {
 func getEnv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	v := os.Getenv(key)
+	if v == "true" || v == "1" || v == "yes" {
+		return true
+	}
+	if v == "false" || v == "0" || v == "no" {
+		return false
 	}
 	return fallback
 }

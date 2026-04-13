@@ -132,6 +132,17 @@
         {{template "content" .}}
     </main>
 
+    {{if not .HideFooter}}
+    <footer class="mt-8 py-4 border-t border-gray-200 text-center text-xs text-gray-400">
+        <a href="https://github.com/matoy/myPresence" target="_blank" rel="noopener noreferrer"
+           class="hover:text-gray-600 transition">myPresence</a>
+        &nbsp;&mdash;&nbsp;{{.AppVersion}}
+        &nbsp;&mdash;&nbsp;
+        <a href="https://github.com/matoy/myPresence/blob/main/LICENSE" target="_blank" rel="noopener noreferrer"
+           class="hover:text-gray-600 transition">GPL v3</a>
+    </footer>
+    {{end}}
+
     <script src="/static/js/app.js"></script>
 </body>
 </html>
