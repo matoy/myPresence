@@ -158,6 +158,33 @@ func (d *DB) migrate() error {
 	// Add half column to presence_logs (idempotent)
 	d.Exec(`ALTER TABLE presence_logs ADD COLUMN half TEXT NOT NULL DEFAULT 'full'`)
 
+	// Floorplan tables (idempotent)
+	d.Exec(`CREATE TABLE IF NOT EXISTS floorplans (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		image_path TEXT NOT NULL DEFAULT '',
+		sort_order INTEGER NOT NULL DEFAULT 0
+	)`)
+	d.Exec(`CREATE TABLE IF NOT EXISTS seats (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		floorplan_id INTEGER NOT NULL,
+		label TEXT NOT NULL,
+		x_pct REAL NOT NULL DEFAULT 0,
+		y_pct REAL NOT NULL DEFAULT 0,
+		FOREIGN KEY (floorplan_id) REFERENCES floorplans(id) ON DELETE CASCADE
+	)`)
+	d.Exec(`CREATE TABLE IF NOT EXISTS seat_reservations (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		seat_id INTEGER NOT NULL,
+		user_id INTEGER NOT NULL,
+		date TEXT NOT NULL,
+		half TEXT NOT NULL DEFAULT 'full',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(seat_id, date, half),
+		FOREIGN KEY (seat_id) REFERENCES seats(id) ON DELETE CASCADE,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	)`)
+
 	return nil
 }
 
@@ -329,7 +356,7 @@ func (d *DB) UpdateUserRoles(id int64, roles string) error {
 	valid := map[string]bool{
 		models.RoleBasic: true, models.RoleTeamManager: true,
 		models.RoleTeamLeader: true, models.RoleStatusManager: true,
-		models.RoleActivityViewer: true,
+		models.RoleActivityViewer: true, models.RoleFloorplanManager: true,
 		models.RoleGlobal: true,
 	}
 	for _, r := range strings.Split(roles, ",") {
@@ -922,4 +949,192 @@ func (d *DB) GetAdminLogsByActor(actorID int64, since time.Time) ([]models.Admin
 		logs = append(logs, l)
 	}
 	return logs, rows.Err()
+}
+
+// --- Floorplan management ---
+
+// ListFloorplans returns all floorplans ordered by sort_order.
+func (d *DB) ListFloorplans() ([]models.Floorplan, error) {
+	rows, err := d.Query("SELECT id, name, image_path, sort_order FROM floorplans ORDER BY sort_order, id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var fps []models.Floorplan
+	for rows.Next() {
+		var f models.Floorplan
+		if err := rows.Scan(&f.ID, &f.Name, &f.ImagePath, &f.SortOrder); err != nil {
+			return nil, err
+		}
+		fps = append(fps, f)
+	}
+	return fps, rows.Err()
+}
+
+// GetFloorplan returns a single floorplan by ID.
+func (d *DB) GetFloorplan(id int64) (*models.Floorplan, error) {
+	var f models.Floorplan
+	err := d.QueryRow("SELECT id, name, image_path, sort_order FROM floorplans WHERE id = ?", id).
+		Scan(&f.ID, &f.Name, &f.ImagePath, &f.SortOrder)
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
+// CreateFloorplan creates a new floorplan.
+func (d *DB) CreateFloorplan(name string, sortOrder int) (int64, error) {
+	res, err := d.Exec("INSERT INTO floorplans (name, sort_order) VALUES (?, ?)", name, sortOrder)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// UpdateFloorplan updates a floorplan's name and sort order.
+func (d *DB) UpdateFloorplan(id int64, name string, sortOrder int) error {
+	_, err := d.Exec("UPDATE floorplans SET name = ?, sort_order = ? WHERE id = ?", name, sortOrder, id)
+	return err
+}
+
+// SetFloorplanImage stores the image path for a floorplan.
+func (d *DB) SetFloorplanImage(id int64, imagePath string) error {
+	_, err := d.Exec("UPDATE floorplans SET image_path = ? WHERE id = ?", imagePath, id)
+	return err
+}
+
+// DeleteFloorplan removes a floorplan and all its seats.
+func (d *DB) DeleteFloorplan(id int64) error {
+	_, err := d.Exec("DELETE FROM floorplans WHERE id = ?", id)
+	return err
+}
+
+// ListSeats returns all seats for a floorplan.
+func (d *DB) ListSeats(floorplanID int64) ([]models.Seat, error) {
+	rows, err := d.Query("SELECT id, floorplan_id, label, x_pct, y_pct FROM seats WHERE floorplan_id = ? ORDER BY id", floorplanID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var seats []models.Seat
+	for rows.Next() {
+		var s models.Seat
+		if err := rows.Scan(&s.ID, &s.FloorplanID, &s.Label, &s.XPct, &s.YPct); err != nil {
+			return nil, err
+		}
+		seats = append(seats, s)
+	}
+	return seats, rows.Err()
+}
+
+// CreateSeat adds a seat to a floorplan.
+func (d *DB) CreateSeat(floorplanID int64, label string, xPct, yPct float64) (int64, error) {
+	res, err := d.Exec("INSERT INTO seats (floorplan_id, label, x_pct, y_pct) VALUES (?, ?, ?, ?)", floorplanID, label, xPct, yPct)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// UpdateSeat updates a seat's label and position.
+func (d *DB) UpdateSeat(id int64, label string, xPct, yPct float64) error {
+	_, err := d.Exec("UPDATE seats SET label = ?, x_pct = ?, y_pct = ? WHERE id = ?", label, xPct, yPct, id)
+	return err
+}
+
+// DeleteSeat removes a seat.
+func (d *DB) DeleteSeat(id int64) error {
+	_, err := d.Exec("DELETE FROM seats WHERE id = ?", id)
+	return err
+}
+
+// GetSeatsWithStatus returns all seats enriched with booking status for a given user/date/half.
+func (d *DB) GetSeatsWithStatus(floorplanID, userID int64, date, half string) ([]models.SeatWithStatus, error) {
+	seats, err := d.ListSeats(floorplanID)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := d.Query(`
+		SELECT sr.seat_id, sr.user_id, sr.half, sr.id
+		FROM seat_reservations sr
+		JOIN seats s ON sr.seat_id = s.id
+		WHERE s.floorplan_id = ? AND sr.date = ?
+	`, floorplanID, date)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type resEntry struct {
+		uid   int64
+		h     string
+		resID int64
+	}
+	reserved := make(map[int64][]resEntry)
+	for rows.Next() {
+		var seatID, uid, resID int64
+		var h string
+		if err := rows.Scan(&seatID, &uid, &h, &resID); err != nil {
+			return nil, err
+		}
+		reserved[seatID] = append(reserved[seatID], resEntry{uid, h, resID})
+	}
+
+	result := make([]models.SeatWithStatus, len(seats))
+	for i, s := range seats {
+		status := "free"
+		var myResID int64
+		for _, r := range reserved[s.ID] {
+			conflicts := r.h == "full" || half == "full" || r.h == half
+			if !conflicts {
+				continue
+			}
+			if r.uid == userID {
+				status = "mine"
+				myResID = r.resID
+			} else if status != "mine" {
+				status = "taken"
+			}
+		}
+		result[i] = models.SeatWithStatus{Seat: s, Status: status, ReservationID: myResID}
+	}
+	return result, nil
+}
+
+// ReserveSeat books a seat for a user. Returns an error if already taken.
+func (d *DB) ReserveSeat(seatID, userID int64, date, half string) error {
+	if half == "" {
+		half = "full"
+	}
+	var count int
+	d.QueryRow(`
+		SELECT COUNT(*) FROM seat_reservations
+		WHERE seat_id = ? AND date = ? AND (half = ? OR half = 'full' OR ? = 'full')
+	`, seatID, date, half, half).Scan(&count)
+	if count > 0 {
+		return fmt.Errorf("ce siège est déjà réservé pour cette période")
+	}
+	_, err := d.Exec(
+		"INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, ?, ?)",
+		seatID, userID, date, half,
+	)
+	return err
+}
+
+// CancelReservation removes a reservation (only the owner can cancel).
+func (d *DB) CancelReservation(reservationID, userID int64) error {
+	_, err := d.Exec("DELETE FROM seat_reservations WHERE id = ? AND user_id = ?", reservationID, userID)
+	return err
+}
+
+// GetUserOnSiteStatus checks whether a user has an on-site presence for the given date.
+func (d *DB) GetUserOnSiteStatus(userID int64, date string) (bool, error) {
+	var count int
+	err := d.QueryRow(`
+		SELECT COUNT(*) FROM presences p
+		JOIN statuses s ON p.status_id = s.id
+		WHERE p.user_id = ? AND p.date = ? AND s.on_site = 1
+	`, userID, date).Scan(&count)
+	return count > 0, err
 }

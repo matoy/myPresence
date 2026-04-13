@@ -12,6 +12,7 @@ const (
 	RoleTeamLeader       = "team_leader"
 	RoleStatusManager    = "status_manager"
 	RoleActivityViewer   = "activity_viewer"
+	RoleFloorplanManager = "floorplan_manager"
 	RoleGlobal           = "global"
 )
 
@@ -25,6 +26,7 @@ var AllRoles = []struct {
 	{RoleTeamLeader, "Team leader"},
 	{RoleStatusManager, "Status admin"},
 	{RoleActivityViewer, "Activity admin"},
+	{RoleFloorplanManager, "Floorplan manager"},
 	{RoleGlobal, "Global (admin)"},
 }
 
@@ -164,6 +166,41 @@ type AdminLog struct {
 	Action     string    `json:"action"`
 	Details    string    `json:"details"`
 	CreatedAt  time.Time `json:"created_at"`
+}
+
+// Floorplan represents a floor map with seats.
+type Floorplan struct {
+	ID        int64  `json:"id"`
+	Name      string `json:"name"`
+	ImagePath string `json:"image_path"`
+	SortOrder int    `json:"sort_order"`
+}
+
+// Seat represents a bookable seat on a floorplan.
+type Seat struct {
+	ID          int64   `json:"id"`
+	FloorplanID int64   `json:"floorplan_id"`
+	Label       string  `json:"label"`
+	XPct        float64 `json:"x_pct"` // 0–100, percent from left
+	YPct        float64 `json:"y_pct"` // 0–100, percent from top
+}
+
+// SeatWithStatus is a Seat enriched with booking status for a given date/half.
+type SeatWithStatus struct {
+	Seat
+	Status        string `json:"status"`         // "free", "mine", "taken"
+	ReservationID int64  `json:"reservation_id"` // non-zero if status == "mine"
+}
+
+// SeatReservation records a seat booking.
+type SeatReservation struct {
+	ID        int64     `json:"id"`
+	SeatID    int64     `json:"seat_id"`
+	UserID    int64     `json:"user_id"`
+	UserName  string    `json:"user_name"`
+	Date      string    `json:"date"`
+	Half      string    `json:"half"` // "full", "AM", "PM"
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // PageData is the common data passed to all templates.
