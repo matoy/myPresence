@@ -6,9 +6,12 @@ on:
   pull_request:
     branches: [main]
 
+<<<<<<< HEAD
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+=======
+>>>>>>> 9435f9f (git to node24)
 jobs:
   test:
     name: Test & Build
@@ -16,10 +19,17 @@ jobs:
 
     steps:
       - name: Checkout
+<<<<<<< HEAD
         uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
+=======
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+>>>>>>> 9435f9f (git to node24)
         with:
           go-version-file: go.mod
           cache: true
