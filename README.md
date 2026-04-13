@@ -14,7 +14,7 @@ A web application for managing employee presence and absences, built with Go and
 
 ## Features
 
-- **Personal monthly calendar**: each user enters their own presence/absences using click or drag-to-select
+- **Personal monthly calendar**: each user enters their own presence/absences using click or drag-to-select; right-click a day to declare a half-day (AM or PM) with a different status per half
 - **Customizable statuses**: color, label, billable flag (€)
 - **Public holidays**: displayed in grey on the calendar, with an optional imputation flag
 - **Team management**: assign users to teams
