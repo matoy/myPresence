@@ -162,7 +162,7 @@ func main() {
 			Data:        data,
 			SAMLEnabled: cfg.SAMLEnabled,
 			HideFooter:  cfg.HideFooter,
-			AppVersion:  cfg.AppVersion,
+			AppVersion:  config.Version,
 		}
 		_ = logoExists
 		// Add logo flag to config map

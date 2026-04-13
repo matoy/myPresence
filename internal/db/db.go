@@ -743,8 +743,9 @@ func (d *DB) LogPresenceAction(actorID, userID int64, action string, dates []str
 }
 
 // GetUserLogs returns the presence logs for a given user, most recent first.
-func (d *DB) GetUserLogs(userID int64) ([]models.PresenceLog, error) {
-	rows, err := d.Query(`
+// If since is non-zero, only logs after that date are returned.
+func (d *DB) GetUserLogs(userID int64, since time.Time) ([]models.PresenceLog, error) {
+	query := `
 		SELECT pl.id, pl.user_id, pl.actor_id, u.name,
 		       pl.action, pl.date,
 		       COALESCE(pl.status_id, 0), COALESCE(s.name, ''), COALESCE(s.color, ''),
@@ -752,10 +753,15 @@ func (d *DB) GetUserLogs(userID int64) ([]models.PresenceLog, error) {
 		FROM presence_logs pl
 		JOIN users u ON pl.actor_id = u.id
 		LEFT JOIN statuses s ON pl.status_id = s.id
-		WHERE pl.user_id = ?
-		ORDER BY pl.created_at DESC
-		LIMIT 1000
-	`, userID)
+		WHERE pl.user_id = ?`
+	args := []interface{}{userID}
+	if !since.IsZero() {
+		query += " AND pl.created_at >= ?"
+		args = append(args, since)
+	}
+	query += " ORDER BY pl.created_at DESC LIMIT 1000"
+
+	rows, err := d.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -807,8 +813,9 @@ func (d *DB) LogAdminAction(actorID int64, entityType string, entityID int64, ac
 }
 
 // GetAdminLogsByActor returns the admin action logs performed by a given user, most recent first.
-func (d *DB) GetAdminLogsByActor(actorID int64) ([]models.AdminLog, error) {
-	rows, err := d.Query(`
+// If since is non-zero, only logs after that date are returned.
+func (d *DB) GetAdminLogsByActor(actorID int64, since time.Time) ([]models.AdminLog, error) {
+	query := `
 		SELECT al.id, al.actor_id, u.name, al.entity_type, al.entity_id, al.action, al.details, al.created_at,
 		       COALESCE(
 		           CASE WHEN al.entity_type = 'team'    THEN t.name    END,
@@ -823,10 +830,15 @@ func (d *DB) GetAdminLogsByActor(actorID int64) ([]models.AdminLog, error) {
 		LEFT JOIN statuses s  ON al.entity_type = 'status'  AND al.entity_id = s.id
 		LEFT JOIN holidays h  ON al.entity_type = 'holiday' AND al.entity_id = h.id
 		LEFT JOIN users    u2 ON al.entity_type = 'user'    AND al.entity_id = u2.id AND al.entity_id > 0
-		WHERE al.actor_id = ?
-		ORDER BY al.created_at DESC
-		LIMIT 1000
-	`, actorID)
+		WHERE al.actor_id = ?`
+	args := []interface{}{actorID}
+	if !since.IsZero() {
+		query += " AND al.created_at >= ?"
+		args = append(args, since)
+	}
+	query += " ORDER BY al.created_at DESC LIMIT 1000"
+
+	rows, err := d.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}

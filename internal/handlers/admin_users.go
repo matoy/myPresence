@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"presence-app/internal/db"
 	"presence-app/internal/middleware"
@@ -158,13 +159,28 @@ func (h *UsersAdminHandler) UserLogsPage(w http.ResponseWriter, r *http.Request)
 		http.NotFound(w, r)
 		return
 	}
-	logs, _ := h.DB.GetUserLogs(id)
-	adminLogs, _ := h.DB.GetAdminLogsByActor(id)
+
+	// Parse period filter: 7 (default), 30, 90, 0 = all
+	daysParam := r.URL.Query().Get("days")
+	days := 7
+	if daysParam != "" {
+		if v, err := strconv.Atoi(daysParam); err == nil && v >= 0 {
+			days = v
+		}
+	}
+	var since time.Time
+	if days > 0 {
+		since = time.Now().AddDate(0, 0, -days)
+	}
+
+	logs, _ := h.DB.GetUserLogs(id, since)
+	adminLogs, _ := h.DB.GetAdminLogsByActor(id, since)
 	statuses, _ := h.DB.ListStatuses()
 	h.Render(w, r, "admin_user_logs", map[string]interface{}{
 		"TargetUser": targetUser,
 		"Logs":       logs,
 		"AdminLogs":  adminLogs,
 		"Statuses":   statuses,
+		"Days":       days,
 	})
 }

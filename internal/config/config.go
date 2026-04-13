@@ -2,6 +2,9 @@ package config
 
 import "os"
 
+// Version is the application version, updated manually for each release.
+const Version = "0.1.2"
+
 // Config holds all application configuration loaded from environment variables.
 type Config struct {
 	// Server
@@ -17,7 +20,6 @@ type Config struct {
 	LogoPath       string
 
 	// Footer
-	AppVersion string
 	HideFooter bool
 
 	// Local admin auth
@@ -46,7 +48,6 @@ func Load() *Config {
 		AccentColor:    getEnv("ACCENT_COLOR", "#f59e0b"),
 		LogoPath:       getEnv("LOGO_PATH", ""),
 
-		AppVersion: getEnv("APP_VERSION", "dev"),
 		HideFooter: getEnvBool("HIDE_FOOTER", false),
 
 		AdminUser:     getEnv("ADMIN_USER", "admin"),

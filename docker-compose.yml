@@ -65,9 +65,6 @@ services:
       # FOOTER
       # =====================================================================
 
-      # Application version displayed in the footer
-      - APP_VERSION=dev
-
       # Set to "true" to hide the footer (visible by default)
       # - HIDE_FOOTER=true
 

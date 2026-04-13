@@ -14,6 +14,29 @@
         </div>
     </div>
 
+    {{/* ── Filtre de période ── */}}
+    {{$userID := .TargetUser.ID}}
+    {{$days := .Days}}
+    <div class="flex items-center gap-2">
+        <span class="text-sm text-gray-500 whitespace-nowrap">Période :</span>
+        <a href="/admin/users/{{$userID}}/logs?days=7"
+           class="px-3 py-1.5 text-sm rounded-lg border transition {{if eq $days 7}}bg-blue-600 text-white border-blue-600 font-semibold{{else}}bg-white text-gray-600 border-gray-200 hover:bg-gray-50{{end}}">
+            7 jours
+        </a>
+        <a href="/admin/users/{{$userID}}/logs?days=30"
+           class="px-3 py-1.5 text-sm rounded-lg border transition {{if eq $days 30}}bg-blue-600 text-white border-blue-600 font-semibold{{else}}bg-white text-gray-600 border-gray-200 hover:bg-gray-50{{end}}">
+            30 jours
+        </a>
+        <a href="/admin/users/{{$userID}}/logs?days=90"
+           class="px-3 py-1.5 text-sm rounded-lg border transition {{if eq $days 90}}bg-blue-600 text-white border-blue-600 font-semibold{{else}}bg-white text-gray-600 border-gray-200 hover:bg-gray-50{{end}}">
+            90 jours
+        </a>
+        <a href="/admin/users/{{$userID}}/logs?days=0"
+           class="px-3 py-1.5 text-sm rounded-lg border transition {{if eq $days 0}}bg-blue-600 text-white border-blue-600 font-semibold{{else}}bg-white text-gray-600 border-gray-200 hover:bg-gray-50{{end}}">
+            Tout
+        </a>
+    </div>
+
     {{/* ── Section 1 : Actions d'administration ── */}}
     <section x-data="{ filterObjet: '', filterAction: '' }">
         <div class="flex items-center justify-between mb-3">
