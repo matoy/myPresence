@@ -35,6 +35,7 @@ type User struct {
 	Name         string    `json:"name"`
 	Roles        string    `json:"roles"`
 	PasswordHash string    `json:"-"`
+	IsLocal      bool      `json:"is_local"`
 	Disabled     bool      `json:"disabled"`
 	CreatedAt    time.Time `json:"created_at"`
 }

@@ -225,6 +225,7 @@ func (d *DB) GetSessionUser(token string) (*models.User, error) {
 	if err != nil {
 		return nil, err
 	}
+	u.IsLocal = u.PasswordHash != ""
 	return &u, nil
 }
 
@@ -251,6 +252,7 @@ func (d *DB) GetUserByEmail(email string) (*models.User, error) {
 	if err != nil {
 		return nil, err
 	}
+	u.IsLocal = u.PasswordHash != ""
 	return &u, nil
 }
 
@@ -264,6 +266,7 @@ func (d *DB) GetUserByID(id int64) (*models.User, error) {
 	if err != nil {
 		return nil, err
 	}
+	u.IsLocal = u.PasswordHash != ""
 	return &u, nil
 }
 
@@ -293,6 +296,7 @@ func (d *DB) ListUsers() ([]models.User, error) {
 		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt); err != nil {
 			return nil, err
 		}
+		u.IsLocal = u.PasswordHash != ""
 		users = append(users, u)
 	}
 	return users, rows.Err()
@@ -409,6 +413,7 @@ func (d *DB) GetTeamMembers(teamID int64) ([]models.User, error) {
 		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt); err != nil {
 			return nil, err
 		}
+		u.IsLocal = u.PasswordHash != ""
 		users = append(users, u)
 	}
 	return users, rows.Err()
