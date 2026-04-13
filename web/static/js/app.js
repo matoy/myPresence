@@ -16,6 +16,13 @@ function calendarApp(statuses, currentUserId, isAdmin) {
         showPicker: false,
         pickerX: 0,
         pickerY: 0,
+        // Half-day context menu state
+        showContextMenu: false,
+        contextMenuX: 0,
+        contextMenuY: 0,
+        contextMenuDate: null,
+        contextMenuUserId: null,
+        pendingHalf: 'full',
 
         // Check if a cell is blocked (weekend or non-imputable holiday)
         isCellBlocked(userId, date) {
@@ -94,7 +101,8 @@ function calendarApp(statuses, currentUserId, isAdmin) {
                     body: JSON.stringify({
                         user_id: this.selectedUserId,
                         dates: this.selectedDates,
-                        status_id: statusId
+                        status_id: statusId,
+                        half: this.pendingHalf
                     })
                 });
                 if (resp.ok) {
@@ -106,6 +114,7 @@ function calendarApp(statuses, currentUserId, isAdmin) {
             } catch (e) {
                 alert('Erreur de connexion');
             }
+            this.pendingHalf = 'full';
             this.cancelSelect();
         },
 
@@ -119,7 +128,8 @@ function calendarApp(statuses, currentUserId, isAdmin) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         user_id: this.selectedUserId,
-                        dates: this.selectedDates
+                        dates: this.selectedDates,
+                        half: ''
                     })
                 });
                 if (resp.ok) {
@@ -128,6 +138,7 @@ function calendarApp(statuses, currentUserId, isAdmin) {
             } catch (e) {
                 alert('Erreur de connexion');
             }
+            this.pendingHalf = 'full';
             this.cancelSelect();
         },
 
@@ -136,6 +147,56 @@ function calendarApp(statuses, currentUserId, isAdmin) {
             this.selectedDates = [];
             this.selectedUserId = null;
             this.showPicker = false;
+            this.showContextMenu = false;
+            this.pendingHalf = 'full';
+        },
+
+        // Open right-click context menu for half-day selection
+        openContextMenu(userId, date, event) {
+            if (!this.isAdmin && userId !== this.currentUserId) return;
+            if (this.isCellBlocked(userId, date)) return;
+            this.showContextMenu = true;
+            this.showPicker = false;
+            this.contextMenuDate = date;
+            this.contextMenuUserId = userId;
+            this.contextMenuX = Math.min(event.clientX + 5, window.innerWidth - 220);
+            this.contextMenuY = Math.min(event.clientY + 5, window.innerHeight - 210);
+        },
+
+        // Select half (AM / full / PM) and open status picker
+        selectHalf(half) {
+            this.pendingHalf = half;
+            this.showContextMenu = false;
+            this.selectedUserId = this.contextMenuUserId;
+            this.selectedDates = [this.contextMenuDate];
+            this.pickerX = this.contextMenuX;
+            this.pickerY = this.contextMenuY;
+            this.showPicker = true;
+        },
+
+        // Clear all halves for the context menu target date
+        async clearDay() {
+            this.showContextMenu = false;
+            if (!this.contextMenuUserId || !this.contextMenuDate) return;
+            try {
+                const resp = await fetch('/api/presences/clear', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: this.contextMenuUserId,
+                        dates: [this.contextMenuDate],
+                        half: ''
+                    })
+                });
+                if (resp.ok) {
+                    window.location.reload();
+                } else {
+                    const d = await resp.json();
+                    alert(d.error || 'Erreur');
+                }
+            } catch (e) {
+                alert('Erreur de connexion');
+            }
         },
 
         // Initialize event listeners

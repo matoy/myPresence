@@ -137,6 +137,27 @@ func (d *DB) migrate() error {
 	// Rename cra_viewer role to activity_viewer (idempotent)
 	d.Exec(`UPDATE users SET role = REPLACE(role, 'cra_viewer', 'activity_viewer') WHERE role LIKE '%cra_viewer%'`)
 
+	// Migrate presences table to add half-day support (idempotent)
+	var halfColExists int
+	d.QueryRow("SELECT COUNT(*) FROM pragma_table_info('presences') WHERE name='half'").Scan(&halfColExists)
+	if halfColExists == 0 {
+		d.Exec(`CREATE TABLE presences_new (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id INTEGER NOT NULL,
+			date TEXT NOT NULL,
+			half TEXT NOT NULL DEFAULT 'full',
+			status_id INTEGER NOT NULL,
+			UNIQUE(user_id, date, half),
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+			FOREIGN KEY (status_id) REFERENCES statuses(id)
+		)`)
+		d.Exec(`INSERT INTO presences_new (id, user_id, date, half, status_id) SELECT id, user_id, date, 'full', status_id FROM presences`)
+		d.Exec(`DROP TABLE presences`)
+		d.Exec(`ALTER TABLE presences_new RENAME TO presences`)
+	}
+	// Add half column to presence_logs (idempotent)
+	d.Exec(`ALTER TABLE presence_logs ADD COLUMN half TEXT NOT NULL DEFAULT 'full'`)
+
 	return nil
 }
 
@@ -503,9 +524,9 @@ func (d *DB) DeleteStatus(id int64) error {
 
 // --- Presence management ---
 
-// GetPresences returns a map: userID -> date -> statusID for the given users and date range.
-func (d *DB) GetPresences(userIDs []int64, startDate, endDate string) (map[int64]map[string]int64, error) {
-	result := make(map[int64]map[string]int64)
+// GetPresences returns a map: userID -> date -> half -> statusID for the given users and date range.
+func (d *DB) GetPresences(userIDs []int64, startDate, endDate string) (map[int64]map[string]map[string]int64, error) {
+	result := make(map[int64]map[string]map[string]int64)
 	if len(userIDs) == 0 {
 		return result, nil
 	}
@@ -519,7 +540,7 @@ func (d *DB) GetPresences(userIDs []int64, startDate, endDate string) (map[int64
 	args = append(args, startDate, endDate)
 
 	query := fmt.Sprintf(
-		"SELECT user_id, date, status_id FROM presences WHERE user_id IN (%s) AND date >= ? AND date <= ?",
+		"SELECT user_id, date, half, status_id FROM presences WHERE user_id IN (%s) AND date >= ? AND date <= ?",
 		strings.Join(placeholders, ","),
 	)
 
@@ -531,37 +552,53 @@ func (d *DB) GetPresences(userIDs []int64, startDate, endDate string) (map[int64
 
 	for rows.Next() {
 		var userID, statusID int64
-		var date string
-		if err := rows.Scan(&userID, &date, &statusID); err != nil {
+		var date, half string
+		if err := rows.Scan(&userID, &date, &half, &statusID); err != nil {
 			return nil, err
 		}
 		if result[userID] == nil {
-			result[userID] = make(map[string]int64)
+			result[userID] = make(map[string]map[string]int64)
 		}
-		result[userID][date] = statusID
+		if result[userID][date] == nil {
+			result[userID][date] = make(map[string]int64)
+		}
+		result[userID][date][half] = statusID
 	}
 	return result, rows.Err()
 }
 
 // SetPresences sets the status for a user on multiple dates (upsert).
-func (d *DB) SetPresences(userID int64, dates []string, statusID int64) error {
+// half must be "full", "AM", or "PM". Empty defaults to "full".
+// Setting "full" removes any existing AM/PM entries. Setting AM/PM removes any full-day entry.
+func (d *DB) SetPresences(userID int64, dates []string, statusID int64, half string) error {
+	if half == "" {
+		half = "full"
+	}
+	if half != "full" && half != "AM" && half != "PM" {
+		return fmt.Errorf("invalid half value: %s", half)
+	}
 	tx, err := d.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
-	stmt, err := tx.Prepare(`
-		INSERT INTO presences (user_id, date, status_id) VALUES (?, ?, ?)
-		ON CONFLICT(user_id, date) DO UPDATE SET status_id = excluded.status_id
-	`)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-
 	for _, date := range dates {
-		if _, err := stmt.Exec(userID, date, statusID); err != nil {
+		if half == "full" {
+			// Remove any existing half-day entries for this date
+			if _, err := tx.Exec("DELETE FROM presences WHERE user_id = ? AND date = ? AND half IN ('AM', 'PM')", userID, date); err != nil {
+				return err
+			}
+		} else {
+			// Remove any existing full-day entry for this date
+			if _, err := tx.Exec("DELETE FROM presences WHERE user_id = ? AND date = ? AND half = 'full'", userID, date); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.Exec(`
+			INSERT INTO presences (user_id, date, half, status_id) VALUES (?, ?, ?, ?)
+			ON CONFLICT(user_id, date, half) DO UPDATE SET status_id = excluded.status_id
+		`, userID, date, half, statusID); err != nil {
 			return err
 		}
 	}
@@ -569,21 +606,39 @@ func (d *DB) SetPresences(userID int64, dates []string, statusID int64) error {
 }
 
 // ClearPresences removes presences for a user on specific dates.
-func (d *DB) ClearPresences(userID int64, dates []string) error {
+// If half is empty, all halves are cleared. Otherwise only the specified half is cleared.
+func (d *DB) ClearPresences(userID int64, dates []string, half string) error {
 	if len(dates) == 0 {
 		return nil
 	}
-	placeholders := make([]string, len(dates))
-	args := []interface{}{userID}
-	for i, date := range dates {
-		placeholders[i] = "?"
-		args = append(args, date)
+	if half != "" && half != "full" && half != "AM" && half != "PM" {
+		return fmt.Errorf("invalid half value: %s", half)
 	}
+	placeholders := make([]string, len(dates))
+	for i := range dates {
+		placeholders[i] = "?"
+	}
+	datePlaceholders := strings.Join(placeholders, ",")
 
-	query := fmt.Sprintf(
-		"DELETE FROM presences WHERE user_id = ? AND date IN (%s)",
-		strings.Join(placeholders, ","),
-	)
+	var query string
+	var args []interface{}
+	if half == "" {
+		// Clear all halves for the given dates
+		query = fmt.Sprintf("DELETE FROM presences WHERE user_id = ? AND date IN (%s)", datePlaceholders)
+		args = make([]interface{}, 0, 1+len(dates))
+		args = append(args, userID)
+		for _, d := range dates {
+			args = append(args, d)
+		}
+	} else {
+		// Clear only the specified half
+		query = fmt.Sprintf("DELETE FROM presences WHERE user_id = ? AND half = ? AND date IN (%s)", datePlaceholders)
+		args = make([]interface{}, 0, 2+len(dates))
+		args = append(args, userID, half)
+		for _, d := range dates {
+			args = append(args, d)
+		}
+	}
 	_, err := d.Exec(query, args...)
 	return err
 }
@@ -622,16 +677,22 @@ func (d *DB) GetTeamStats(teamID int64, startDate, endDate string) ([]models.Use
 	for _, member := range members {
 		us := models.UserStats{
 			User:         member,
-			StatusCounts: make(map[int64]int),
+			StatusCounts: make(map[int64]float64),
 		}
 		if up, ok := presences[member.ID]; ok {
-			for _, statusID := range up {
-				us.StatusCounts[statusID]++
-				if billableMap[statusID] {
-					us.BillableDays++
-				}
-				if onSiteMap[statusID] {
-					us.OnSiteDays++
+			for _, halves := range up {
+				for half, statusID := range halves {
+					weight := 1.0
+					if half == "AM" || half == "PM" {
+						weight = 0.5
+					}
+					us.StatusCounts[statusID] += weight
+					if billableMap[statusID] {
+						us.BillableDays += weight
+					}
+					if onSiteMap[statusID] {
+						us.OnSiteDays += weight
+					}
 				}
 			}
 		}
@@ -710,7 +771,10 @@ func (d *DB) DeleteHoliday(id int64) error {
 // --- Presence logs ---
 
 // LogPresenceAction records a set or clear action for each date.
-func (d *DB) LogPresenceAction(actorID, userID int64, action string, dates []string, statusID int64) error {
+func (d *DB) LogPresenceAction(actorID, userID int64, action string, dates []string, statusID int64, half string) error {
+	if half == "" {
+		half = "full"
+	}
 	tx, err := d.Begin()
 	if err != nil {
 		return err
@@ -719,27 +783,27 @@ func (d *DB) LogPresenceAction(actorID, userID int64, action string, dates []str
 
 	if action == "set" {
 		s, err := tx.Prepare(
-			"INSERT INTO presence_logs (user_id, actor_id, action, date, status_id) VALUES (?, ?, ?, ?, ?)",
+			"INSERT INTO presence_logs (user_id, actor_id, action, date, status_id, half) VALUES (?, ?, ?, ?, ?, ?)",
 		)
 		if err != nil {
 			return err
 		}
 		defer s.Close()
 		for _, date := range dates {
-			if _, err := s.Exec(userID, actorID, action, date, statusID); err != nil {
+			if _, err := s.Exec(userID, actorID, action, date, statusID, half); err != nil {
 				return err
 			}
 		}
 	} else {
 		s, err := tx.Prepare(
-			"INSERT INTO presence_logs (user_id, actor_id, action, date) VALUES (?, ?, ?, ?)",
+			"INSERT INTO presence_logs (user_id, actor_id, action, date, half) VALUES (?, ?, ?, ?, ?)",
 		)
 		if err != nil {
 			return err
 		}
 		defer s.Close()
 		for _, date := range dates {
-			if _, err := s.Exec(userID, actorID, action, date); err != nil {
+			if _, err := s.Exec(userID, actorID, action, date, half); err != nil {
 				return err
 			}
 		}
@@ -752,7 +816,7 @@ func (d *DB) LogPresenceAction(actorID, userID int64, action string, dates []str
 func (d *DB) GetUserLogs(userID int64, since time.Time) ([]models.PresenceLog, error) {
 	query := `
 		SELECT pl.id, pl.user_id, pl.actor_id, u.name,
-		       pl.action, pl.date,
+		       pl.action, pl.date, pl.half,
 		       COALESCE(pl.status_id, 0), COALESCE(s.name, ''), COALESCE(s.color, ''),
 		       pl.created_at
 		FROM presence_logs pl
@@ -777,7 +841,7 @@ func (d *DB) GetUserLogs(userID int64, since time.Time) ([]models.PresenceLog, e
 		var l models.PresenceLog
 		if err := rows.Scan(
 			&l.ID, &l.UserID, &l.ActorID, &l.ActorName,
-			&l.Action, &l.Date,
+			&l.Action, &l.Date, &l.Half,
 			&l.StatusID, &l.StatusName, &l.StatusColor,
 			&l.CreatedAt,
 		); err != nil {

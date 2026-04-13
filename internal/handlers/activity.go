@@ -62,9 +62,9 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Calculate totals (per-status and billable)
-	totalBillable := 0
-	totalSetDays := 0
-	statussTotals := make(map[int64]int)
+	totalBillable := 0.0
+	totalSetDays := 0.0
+	statussTotals := make(map[int64]float64)
 	for _, s := range stats {
 		totalBillable += s.BillableDays
 		for sid, count := range s.StatusCounts {
@@ -87,7 +87,7 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	var members []models.User
-	presenceMap := make(map[int64]map[string]int64)
+	presenceMap := make(map[int64]map[string]map[string]int64)
 	if teamID > 0 {
 		members = make([]models.User, len(stats))
 		userIDs := make([]int64, len(stats))
@@ -120,11 +120,11 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	workingDaysExcluded := workingDays - holidayCount
-	totalOnSite := 0
+	totalOnSite := 0.0
 	for _, s := range stats {
 		totalOnSite += s.OnSiteDays
 	}
-	totalWorkingDays := workingDaysExcluded * len(stats)
+	totalWorkingDays := float64(workingDaysExcluded) * float64(len(stats))
 	totalNotSet := totalWorkingDays - totalSetDays
 	if totalNotSet < 0 {
 		totalNotSet = 0
@@ -141,15 +141,21 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 			onSiteIDs[s.ID] = true
 		}
 	}
-	dayBillable := make(map[string]int)
-	dayOnSite := make(map[string]int)
+	dayBillable := make(map[string]float64)
+	dayOnSite := make(map[string]float64)
 	for _, userPresences := range presenceMap {
-		for date, statusID := range userPresences {
-			if billableIDs[statusID] {
-				dayBillable[date]++
-			}
-			if onSiteIDs[statusID] {
-				dayOnSite[date]++
+		for date, halves := range userPresences {
+			for half, statusID := range halves {
+				weight := 1.0
+				if half == "AM" || half == "PM" {
+					weight = 0.5
+				}
+				if billableIDs[statusID] {
+					dayBillable[date] += weight
+				}
+				if onSiteIDs[statusID] {
+					dayOnSite[date] += weight
+				}
 			}
 		}
 	}

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"presence-app/internal/config"
@@ -98,6 +99,51 @@ func main() {
 				total += v
 			}
 			return total
+		},
+		// Float64 variants for half-day support
+		"getCountF": func(m map[int64]float64, key int64) float64 {
+			return m[key]
+		},
+		"getStrCountF": func(m map[string]float64, key string) float64 {
+			return m[key]
+		},
+		"sumMapF": func(m map[int64]float64) float64 {
+			total := 0.0
+			for _, v := range m {
+				total += v
+			}
+			return total
+		},
+		"fmtF": func(f float64) string {
+			if f == float64(int64(f)) {
+				return strconv.FormatInt(int64(f), 10)
+			}
+			return strconv.FormatFloat(f, 'f', 1, 64)
+		},
+		"percentF": func(a, b float64) int {
+			if b == 0 {
+				return 0
+			}
+			return int(a * 100 / b)
+		},
+		"i2f": func(i int) float64 {
+			return float64(i)
+		},
+		"subF": func(a, b float64) float64 {
+			return a - b
+		},
+		// Presence half-day helpers for templates
+		"presenceHalf": func(m map[string]map[string]int64, date, half string) int64 {
+			if halves, ok := m[date]; ok {
+				return halves[half]
+			}
+			return 0
+		},
+		"hasDatePresence": func(m map[string]map[string]int64, date string) bool {
+			if halves, ok := m[date]; ok {
+				return len(halves) > 0
+			}
+			return false
 		},
 		"dict": func(pairs ...interface{}) map[string]interface{} {
 			d := make(map[string]interface{})

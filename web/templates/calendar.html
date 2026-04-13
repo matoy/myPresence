@@ -66,12 +66,26 @@
                         @mousedown.prevent="startSelect({{$uid}}, '{{.Date}}')"
                         @mouseenter="extendSelect({{$uid}}, '{{.Date}}')"
                         @touchstart.prevent="startSelect({{$uid}}, '{{.Date}}')"
-                        @touchmove.prevent="handleTouchMove($event)">
-                        {{if hasKey $presences .Date}}
+                        @touchmove.prevent="handleTouchMove($event)"
+                        @contextmenu.prevent="openContextMenu({{$uid}}, '{{.Date}}', $event)">
+                        {{$fullSid := presenceHalf $presences .Date "full"}}
+                        {{$amSid   := presenceHalf $presences .Date "AM"}}
+                        {{$pmSid   := presenceHalf $presences .Date "PM"}}
+                        {{if $fullSid}}
                         <div class="w-full h-10 transition-all"
                              :class="isSelected({{$uid}}, '{{.Date}}') ? 'ring-2 ring-primary ring-inset' : ''"
-                             style="background-color: {{statusColor $allStatuses (getKey $presences .Date)}}; opacity: {{if .IsWeekend}}0.6{{else}}1{{end}}"
-                             title="{{statusName $allStatuses (getKey $presences .Date)}}">
+                             style="background-color: {{statusColor $allStatuses $fullSid}}; opacity: {{if .IsWeekend}}0.6{{else}}1{{end}}"
+                             title="{{statusName $allStatuses $fullSid}}">
+                        </div>
+                        {{else if or $amSid $pmSid}}
+                        <div class="w-full h-10 flex flex-col transition-all"
+                             :class="isSelected({{$uid}}, '{{.Date}}') ? 'ring-2 ring-primary ring-inset' : ''">
+                            <div class="flex-1 w-full"
+                                 style="background-color: {{if $amSid}}{{statusColor $allStatuses $amSid}}{{else}}#e5e7eb{{end}}"
+                                 title="AM{{if $amSid}}: {{statusName $allStatuses $amSid}}{{end}}"></div>
+                            <div class="flex-1 w-full"
+                                 style="background-color: {{if $pmSid}}{{statusColor $allStatuses $pmSid}}{{else}}#e5e7eb{{end}}"
+                                 title="PM{{if $pmSid}}: {{statusName $allStatuses $pmSid}}{{end}}"></div>
                         </div>
                         {{else}}
                         <div class="w-full h-10 transition-all
@@ -99,7 +113,10 @@
          class="fixed z-50 bg-white rounded-2xl shadow-2xl border border-gray-200 p-4 min-w-[240px]"
          :style="'top: ' + pickerY + 'px; left: ' + pickerX + 'px'">
         <p class="text-sm font-semibold text-gray-700 mb-3">
-            <span x-text="selectedDates.length"></span> day(s) selected
+            <span x-text="selectedDates.length"></span> jour(s)
+            <template x-if="pendingHalf !== 'full'">
+                <span class="ml-1 text-xs font-medium text-primary" x-text="pendingHalf === 'AM' ? '· Matin' : '· Après-midi'"></span>
+            </template>
         </p>
         <div class="space-y-1.5">
             <template x-for="status in statuses" :key="status.id">
@@ -121,6 +138,31 @@
                 Cancel
             </button>
         </div>
+    </div>
+
+    <!-- Right-click context menu for half-day selection -->
+    <div x-show="showContextMenu"
+         @click.away="showContextMenu = false"
+         class="fixed z-[60] bg-white rounded-xl shadow-2xl border border-gray-200 p-1.5 min-w-[200px]"
+         :style="'top: ' + contextMenuY + 'px; left: ' + contextMenuX + 'px'">
+        <div class="text-[10px] font-semibold text-gray-400 uppercase px-2 py-1">Choisir la période</div>
+        <button @click="selectHalf('AM')"
+                class="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg hover:bg-gray-100 text-gray-700 transition">
+            <span>🌅</span> Matin (AM)
+        </button>
+        <button @click="selectHalf('full')"
+                class="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg hover:bg-gray-100 text-gray-700 transition">
+            <span>📅</span> Journée entière
+        </button>
+        <button @click="selectHalf('PM')"
+                class="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg hover:bg-gray-100 text-gray-700 transition">
+            <span>🌆</span> Après-midi (PM)
+        </button>
+        <hr class="my-1 border-gray-100">
+        <button @click="clearDay()"
+                class="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg text-red-600 hover:bg-red-50 transition">
+            <span>✖</span> Effacer ce jour
+        </button>
     </div>
 
 </div>

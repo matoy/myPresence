@@ -72,7 +72,7 @@ func (h *CalendarHandler) CalendarPage(w http.ResponseWriter, r *http.Request) {
 	}
 	userPresences := presenceMap[user.ID]
 	if userPresences == nil {
-		userPresences = make(map[string]int64)
+		userPresences = make(map[string]map[string]int64)
 	}
 
 	// Get statuses
@@ -101,6 +101,7 @@ func (h *CalendarHandler) SetPresences(w http.ResponseWriter, r *http.Request) {
 		UserID   int64    `json:"user_id"`
 		Dates    []string `json:"dates"`
 		StatusID int64    `json:"status_id"`
+		Half     string   `json:"half"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "Requête invalide", http.StatusBadRequest)
@@ -121,12 +122,12 @@ func (h *CalendarHandler) SetPresences(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := h.DB.SetPresences(req.UserID, req.Dates, req.StatusID); err != nil {
+	if err := h.DB.SetPresences(req.UserID, req.Dates, req.StatusID, req.Half); err != nil {
 		jsonError(w, "Erreur sauvegarde", http.StatusInternalServerError)
 		return
 	}
 
-	h.DB.LogPresenceAction(user.ID, req.UserID, "set", req.Dates, req.StatusID)
+	h.DB.LogPresenceAction(user.ID, req.UserID, "set", req.Dates, req.StatusID, req.Half)
 
 	jsonOK(w, map[string]string{"status": "ok"})
 }
@@ -138,6 +139,7 @@ func (h *CalendarHandler) ClearPresences(w http.ResponseWriter, r *http.Request)
 	var req struct {
 		UserID int64    `json:"user_id"`
 		Dates  []string `json:"dates"`
+		Half   string   `json:"half"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		jsonError(w, "Requête invalide", http.StatusBadRequest)
@@ -149,12 +151,12 @@ func (h *CalendarHandler) ClearPresences(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if err := h.DB.ClearPresences(req.UserID, req.Dates); err != nil {
+	if err := h.DB.ClearPresences(req.UserID, req.Dates, req.Half); err != nil {
 		jsonError(w, "Erreur suppression", http.StatusInternalServerError)
 		return
 	}
 
-	h.DB.LogPresenceAction(user.ID, req.UserID, "clear", req.Dates, 0)
+	h.DB.LogPresenceAction(user.ID, req.UserID, "clear", req.Dates, 0, req.Half)
 
 	jsonOK(w, map[string]string{"status": "ok"})
 }

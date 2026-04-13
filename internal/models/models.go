@@ -101,13 +101,14 @@ type Presence struct {
 	ID       int64  `json:"id"`
 	UserID   int64  `json:"user_id"`
 	Date     string `json:"date"`
+	Half     string `json:"half"`      // "full", "AM", or "PM"
 	StatusID int64  `json:"status_id"`
 }
 
 // CalendarUser holds a user with their presences for the calendar view.
 type CalendarUser struct {
 	User      User
-	Presences map[string]int64 // date (YYYY-MM-DD) -> statusID
+	Presences map[string]map[string]int64 // date -> half -> statusID
 }
 
 // DayInfo describes a single day in the calendar.
@@ -132,9 +133,9 @@ type Holiday struct {
 // UserStats holds stats for a single user over a period.
 type UserStats struct {
 	User         User
-	StatusCounts map[int64]int // statusID -> day count
-	BillableDays int
-	OnSiteDays   int
+	StatusCounts map[int64]float64 // statusID -> day count (0.5 per half-day)
+	BillableDays float64
+	OnSiteDays   float64
 }
 
 // PresenceLog records a set or clear action on a user's presence.
@@ -145,6 +146,7 @@ type PresenceLog struct {
 	ActorName   string    `json:"actor_name"`
 	Action      string    `json:"action"` // "set" or "clear"
 	Date        string    `json:"date"`   // YYYY-MM-DD (presence date)
+	Half        string    `json:"half"`   // "full", "AM", or "PM"
 	StatusID    int64     `json:"status_id"`
 	StatusName  string    `json:"status_name"`
 	StatusColor string    `json:"status_color"`
