@@ -48,10 +48,10 @@ services:
 
       # UI colors (hexadecimal format)
       # PrimaryColor: main color (header, buttons, links)
-      - PRIMARY_COLOR=#06532A
+      - PRIMARY_COLOR=#082415
 
       # SecondaryColor: secondary color (header gradient)
-      - SECONDARY_COLOR=#082415
+      - SECONDARY_COLOR=#06532A
 
       # AccentColor: accent color (badges, highlights)
       - ACCENT_COLOR=#81C071
