@@ -1,0 +1,6 @@
+docker-compose.yml
+Dockerfile
+mypresence-data/app.db
+mypresence-data/app.db-shm
+mypresence-data/app.db-wal
+mypresence-data/logo.png
