@@ -7,6 +7,11 @@
     <title>{{(index .Config "AppName")}}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    {{if (index .Config "FontURL")}}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="{{(index .Config "FontURL")}}">
+    {{end}}
     <link rel="stylesheet" href="/static/css/app.css">
     <script>
         tailwind.config = {
@@ -16,13 +21,17 @@
                         primary: '{{(index .Config "PrimaryColor")}}',
                         secondary: '{{(index .Config "SecondaryColor")}}',
                         accent: '{{(index .Config "AccentColor")}}',
-                    }
+                    },
+                    fontFamily: {
+                        sans: [{{(index .Config "FontFamily")}}],
+                        mono: [{{(index .Config "FontFamilyMono")}}],
+                    },
                 }
             }
         }
     </script>
 </head>
-<body class="h-full bg-gray-50">
+<body class="h-full bg-gray-50 font-sans">
     {{if .User}}
     <!-- Navigation -->
     <nav class="bg-gradient-to-r from-primary to-secondary shadow-lg" x-data="{ mobileMenu: false }">
@@ -31,7 +40,7 @@
                 <!-- Logo + App Name -->
                 <div class="flex items-center space-x-3">
                     {{if (index .Config "LogoURL")}}
-                    <img src="{{(index .Config "LogoURL")}}" alt="Logo" class="h-8 w-8 rounded">
+                    <img src="{{(index .Config "LogoURL")}}" alt="Logo" class="h-10 w-auto max-w-[2.5rem] rounded object-contain">
                     {{else}}
                     <div class="h-8 w-8 bg-white/20 rounded flex items-center justify-center">
                         <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

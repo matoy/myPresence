@@ -4,7 +4,7 @@
         <!-- Logo & App Name -->
         <div class="text-center mb-8">
             {{if (index .Config "LogoURL")}}
-            <img src="{{(index .Config "LogoURL")}}" alt="Logo" class="h-16 w-16 mx-auto mb-4 rounded-xl shadow-lg">
+            <img src="{{(index .Config "LogoURL")}}" alt="Logo" class="h-24 w-auto max-w-[12rem] mx-auto mb-4 rounded-xl shadow-lg object-contain">
             {{else}}
             <div class="h-16 w-16 mx-auto mb-4 rounded-xl shadow-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center">
                 <svg class="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -19,6 +19,11 @@ type Config struct {
 	AccentColor    string
 	LogoPath       string
 
+	// Fonts
+	FontURL        string
+	FontFamily     string
+	FontFamilyMono string
+
 	// Footer
 	HideFooter bool
 
@@ -47,6 +52,10 @@ func Load() *Config {
 		SecondaryColor: getEnv("SECONDARY_COLOR", "#1e40af"),
 		AccentColor:    getEnv("ACCENT_COLOR", "#f59e0b"),
 		LogoPath:       getEnv("LOGO_PATH", ""),
+
+		FontURL:        getEnv("FONT_URL", "https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"),
+		FontFamily:     getEnv("FONT_FAMILY", "'Inter', ui-sans-serif, system-ui, sans-serif"),
+		FontFamilyMono: getEnv("FONT_FAMILY_MONO", "'JetBrains Mono', ui-monospace, monospace"),
 
 		HideFooter: getEnvBool("HIDE_FOOTER", false),
 

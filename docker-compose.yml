@@ -62,6 +62,21 @@ services:
       # - LOGO_PATH=logo.png
 
       # =====================================================================
+      # FONTS
+      # =====================================================================
+
+      # Google Fonts import URL (set to empty to disable)
+      # Default: Inter (body) + JetBrains Mono (code)
+      # - FONT_URL=https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap
+
+      # CSS font-family for the main UI text
+      # Must match a font loaded by FONT_URL
+      # - FONT_FAMILY='Inter', ui-sans-serif, system-ui, sans-serif
+
+      # CSS font-family for monospaced text (dates, codes, etc.)
+      # - FONT_FAMILY_MONO='JetBrains Mono', ui-monospace, monospace
+
+      # =====================================================================
       # FOOTER
       # =====================================================================
 
