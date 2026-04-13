@@ -4,11 +4,12 @@
 // ============================================================
 // Calendar Component (Alpine.js)
 // ============================================================
-function calendarApp(statuses, currentUserId, isAdmin) {
+function calendarApp(statuses, currentUserId, isAdmin, presences) {
     return {
         statuses: statuses || [],
         currentUserId: currentUserId,
         isAdmin: isAdmin,
+        presences: presences || {},
         selecting: false,
         selectedUserId: null,
         selectedDates: [],
@@ -172,6 +173,78 @@ function calendarApp(statuses, currentUserId, isAdmin) {
             this.pickerX = this.contextMenuX;
             this.pickerY = this.contextMenuY;
             this.showPicker = true;
+        },
+
+        // Check whether a date has at least one presence declared
+        hasPresence(date) {
+            if (!date) return false;
+            const halves = this.presences[date];
+            if (!halves) return false;
+            return !!(halves['full'] || halves['AM'] || halves['PM']);
+        },
+
+        // Return the primary statusId for a date (full > AM > PM)
+        getDateStatusId(date) {
+            const halves = this.presences[date];
+            if (!halves) return null;
+            return halves['full'] || halves['AM'] || halves['PM'] || null;
+        },
+
+        // Generate and download an .ics file for the given date
+        addToCalendar(date) {
+            this.showContextMenu = false;
+            const statusId = this.getDateStatusId(date);
+            if (!statusId) return;
+            const status = this.statuses.find(s => s.id === statusId);
+            if (!status) return;
+
+            let busyStatus, transp;
+            if (status.billable && status.on_site) {
+                busyStatus = 'FREE';
+                transp = 'TRANSPARENT';
+            } else if (status.billable && !status.on_site) {
+                busyStatus = 'WORKINGELSEWHERE';
+                transp = 'OPAQUE';
+            } else {
+                busyStatus = 'OOF';
+                transp = 'OPAQUE';
+            }
+
+            const dtstart = date.replace(/-/g, '');
+            const nextDay = new Date(date + 'T00:00:00');
+            nextDay.setDate(nextDay.getDate() + 1);
+            const dtend = nextDay.toISOString().split('T')[0].replace(/-/g, '');
+            const uid = (typeof crypto !== 'undefined' && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : (Date.now() + Math.random()).toString(36);
+
+            const ics = [
+                'BEGIN:VCALENDAR',
+                'VERSION:2.0',
+                'CALSCALE:GREGORIAN',
+                'PRODID:-//Presence App//FR',
+                'BEGIN:VEVENT',
+                'UID:' + uid + '@presence-app',
+                'DTSTART;VALUE=DATE:' + dtstart,
+                'DTEND;VALUE=DATE:' + dtend,
+                'SUMMARY:' + status.name,
+                'TRANSP:' + transp,
+                'X-MICROSOFT-CDO-BUSYSTATUS:' + busyStatus,
+                'X-MICROSOFT-CDO-ALLDAYEVENT:TRUE',
+                'X-MICROSOFT-CDO-REMINDER-SET:FALSE',
+                'END:VEVENT',
+                'END:VCALENDAR'
+            ].join('\r\n');
+
+            const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'presence-' + date + '.ics';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         },
 
         // Clear all halves for the context menu target date
