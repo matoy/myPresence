@@ -72,6 +72,9 @@ func (h *AdminHandler) CreateTeam(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.DB.CreateTeam(name)
+	if currentUser != nil {
+		h.DB.LogAdminAction(currentUser.ID, "team", 0, "create", name)
+	}
 	http.Redirect(w, r, "/admin/teams", http.StatusSeeOther)
 }
 
@@ -83,7 +86,11 @@ func (h *AdminHandler) DeleteTeam(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	teamName := h.DB.GetTeamName(id)
 	h.DB.DeleteTeam(id)
+	if currentUser != nil {
+		h.DB.LogAdminAction(currentUser.ID, "team", id, "delete", teamName)
+	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 
@@ -100,6 +107,9 @@ func (h *AdminHandler) UpdateTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewDecoder(r.Body).Decode(&req)
 	h.DB.UpdateTeam(id, req.Name)
+	if currentUser != nil {
+		h.DB.LogAdminAction(currentUser.ID, "team", id, "update", req.Name)
+	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 
@@ -117,7 +127,14 @@ func (h *AdminHandler) AddTeamMember(w http.ResponseWriter, r *http.Request) {
 		UserID int64 `json:"user_id"`
 	}
 	json.NewDecoder(r.Body).Decode(&req)
+	memberName := strconv.FormatInt(req.UserID, 10)
+	if u, _ := h.DB.GetUserByID(req.UserID); u != nil {
+		memberName = u.Name
+	}
 	h.DB.AddTeamMember(teamID, req.UserID)
+	if currentUser != nil {
+		h.DB.LogAdminAction(currentUser.ID, "team", teamID, "add_member", memberName)
+	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 
@@ -132,7 +149,14 @@ func (h *AdminHandler) RemoveTeamMember(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 	userID, _ := strconv.ParseInt(r.PathValue("userId"), 10, 64)
+	memberName := strconv.FormatInt(userID, 10)
+	if u, _ := h.DB.GetUserByID(userID); u != nil {
+		memberName = u.Name
+	}
 	h.DB.RemoveTeamMember(teamID, userID)
+	if currentUser != nil {
+		h.DB.LogAdminAction(currentUser.ID, "team", teamID, "remove_member", memberName)
+	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 
@@ -171,6 +195,10 @@ func (h *AdminHandler) CreateStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.DB.CreateStatus(models.Status{Name: name, Color: color, Billable: billable, OnSite: onSite, SortOrder: sortOrder})
+	currentUser := middleware.GetUser(r)
+	if currentUser != nil {
+		h.DB.LogAdminAction(currentUser.ID, "status", 0, "create", name)
+	}
 	http.Redirect(w, r, "/admin/statuses", http.StatusSeeOther)
 }
 
@@ -186,13 +214,22 @@ func (h *AdminHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	json.NewDecoder(r.Body).Decode(&req)
 	h.DB.UpdateStatus(models.Status{ID: id, Name: req.Name, Color: req.Color, Billable: req.Billable, OnSite: req.OnSite, SortOrder: req.SortOrder})
+	currentUser := middleware.GetUser(r)
+	if currentUser != nil {
+		h.DB.LogAdminAction(currentUser.ID, "status", id, "update", req.Name)
+	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 
 // DeleteStatus removes a status.
 func (h *AdminHandler) DeleteStatus(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	statusName := h.DB.GetStatusName(id)
 	h.DB.DeleteStatus(id)
+	currentUser := middleware.GetUser(r)
+	if currentUser != nil {
+		h.DB.LogAdminAction(currentUser.ID, "status", id, "delete", statusName)
+	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 
@@ -224,6 +261,10 @@ func (h *AdminHandler) UpdateUserRoles(w http.ResponseWriter, r *http.Request) {
 	if err := h.DB.UpdateUserRoles(id, roles); err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
+	}
+	currentUser := middleware.GetUser(r)
+	if currentUser != nil {
+		h.DB.LogAdminAction(currentUser.ID, "user", id, "update_roles", roles)
 	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }

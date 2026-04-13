@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"presence-app/internal/db"
+	"presence-app/internal/middleware"
 )
 
 // HolidaysHandler manages the public holidays admin page.
@@ -49,6 +50,10 @@ func (h *HolidaysHandler) CreateHoliday(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	currentUser := middleware.GetUser(r)
+	if currentUser != nil {
+		h.DB.LogAdminAction(currentUser.ID, "holiday", 0, "create", date+" "+name)
+	}
 	http.Redirect(w, r, "/admin/holidays", http.StatusSeeOther)
 }
 
@@ -81,6 +86,10 @@ func (h *HolidaysHandler) UpdateHoliday(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	currentUser := middleware.GetUser(r)
+	if currentUser != nil {
+		h.DB.LogAdminAction(currentUser.ID, "holiday", id, "update", req.Date+" "+req.Name)
+	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 
@@ -93,10 +102,16 @@ func (h *HolidaysHandler) DeleteHoliday(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	holidayName := h.DB.GetHolidayName(id)
+
 	if err := h.DB.DeleteHoliday(id); err != nil {
 		jsonError(w, "Erreur suppression", http.StatusInternalServerError)
 		return
 	}
 
+	currentUser := middleware.GetUser(r)
+	if currentUser != nil {
+		h.DB.LogAdminAction(currentUser.ID, "holiday", id, "delete", holidayName)
+	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }

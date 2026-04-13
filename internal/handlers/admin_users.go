@@ -47,6 +47,10 @@ func (h *UsersAdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/users?error=Email+already+in+use", http.StatusSeeOther)
 		return
 	}
+	currentUser := middleware.GetUser(r)
+	if currentUser != nil {
+		h.DB.LogAdminAction(currentUser.ID, "user", 0, "create", email)
+	}
 	http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
 }
 
@@ -68,6 +72,10 @@ func (h *UsersAdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "Email already in use", http.StatusConflict)
 		return
 	}
+	currentUser := middleware.GetUser(r)
+	if currentUser != nil {
+		h.DB.LogAdminAction(currentUser.ID, "user", id, "update", req.Email+" "+req.Name)
+	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 
@@ -85,6 +93,10 @@ func (h *UsersAdminHandler) SetPassword(w http.ResponseWriter, r *http.Request) 
 	if err := h.DB.SetUserPassword(id, req.Password); err != nil {
 		jsonError(w, "Error updating password", http.StatusInternalServerError)
 		return
+	}
+	currentUser := middleware.GetUser(r)
+	if currentUser != nil {
+		h.DB.LogAdminAction(currentUser.ID, "user", id, "set_password", "")
 	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
@@ -105,6 +117,13 @@ func (h *UsersAdminHandler) SetDisabled(w http.ResponseWriter, r *http.Request) 
 		jsonError(w, "Error updating user", http.StatusInternalServerError)
 		return
 	}
+	if currentUser != nil {
+		action := "set_enabled"
+		if req.Disabled {
+			action = "set_disabled"
+		}
+		h.DB.LogAdminAction(currentUser.ID, "user", id, action, "")
+	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 
@@ -116,9 +135,17 @@ func (h *UsersAdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "You cannot delete your own account", http.StatusBadRequest)
 		return
 	}
+	targetUser, _ := h.DB.GetUserByID(id)
 	if err := h.DB.DeleteLocalUser(id); err != nil {
 		jsonError(w, "Error deleting user", http.StatusInternalServerError)
 		return
+	}
+	if currentUser != nil {
+		details := ""
+		if targetUser != nil {
+			details = targetUser.Name + " <" + targetUser.Email + ">"
+		}
+		h.DB.LogAdminAction(currentUser.ID, "user", id, "delete", details)
 	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
@@ -132,8 +159,12 @@ func (h *UsersAdminHandler) UserLogsPage(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	logs, _ := h.DB.GetUserLogs(id)
+	adminLogs, _ := h.DB.GetAdminLogsByActor(id)
+	statuses, _ := h.DB.ListStatuses()
 	h.Render(w, r, "admin_user_logs", map[string]interface{}{
 		"TargetUser": targetUser,
 		"Logs":       logs,
+		"AdminLogs":  adminLogs,
+		"Statuses":   statuses,
 	})
 }

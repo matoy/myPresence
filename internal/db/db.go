@@ -108,6 +108,16 @@ func (d *DB) migrate() error {
 			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
 			FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE CASCADE
 		);
+		CREATE TABLE IF NOT EXISTS admin_logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			actor_id INTEGER NOT NULL,
+			entity_type TEXT NOT NULL,
+			entity_id INTEGER NOT NULL DEFAULT 0,
+			action TEXT NOT NULL,
+			details TEXT NOT NULL DEFAULT '',
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE CASCADE
+		);
 	`)
 	if err != nil {
 		return err
@@ -760,6 +770,72 @@ func (d *DB) GetUserLogs(userID int64) ([]models.PresenceLog, error) {
 			&l.StatusID, &l.StatusName, &l.StatusColor,
 			&l.CreatedAt,
 		); err != nil {
+			return nil, err
+		}
+		logs = append(logs, l)
+	}
+	return logs, rows.Err()
+}
+
+// GetTeamName returns the name of a team by ID, or empty string if not found.
+func (d *DB) GetTeamName(id int64) string {
+	var name string
+	d.QueryRow("SELECT name FROM teams WHERE id = ?", id).Scan(&name)
+	return name
+}
+
+// GetStatusName returns the name of a status by ID, or empty string if not found.
+func (d *DB) GetStatusName(id int64) string {
+	var name string
+	d.QueryRow("SELECT name FROM statuses WHERE id = ?", id).Scan(&name)
+	return name
+}
+
+// GetHolidayName returns the name of a holiday by ID, or empty string if not found.
+func (d *DB) GetHolidayName(id int64) string {
+	var name string
+	d.QueryRow("SELECT name FROM holidays WHERE id = ?", id).Scan(&name)
+	return name
+}
+
+// LogAdminAction records an admin operation on an entity (team, status, holiday, user).
+func (d *DB) LogAdminAction(actorID int64, entityType string, entityID int64, action, details string) {
+	d.Exec(
+		"INSERT INTO admin_logs (actor_id, entity_type, entity_id, action, details) VALUES (?, ?, ?, ?, ?)",
+		actorID, entityType, entityID, action, details,
+	)
+}
+
+// GetAdminLogsByActor returns the admin action logs performed by a given user, most recent first.
+func (d *DB) GetAdminLogsByActor(actorID int64) ([]models.AdminLog, error) {
+	rows, err := d.Query(`
+		SELECT al.id, al.actor_id, u.name, al.entity_type, al.entity_id, al.action, al.details, al.created_at,
+		       COALESCE(
+		           CASE WHEN al.entity_type = 'team'    THEN t.name    END,
+		           CASE WHEN al.entity_type = 'status'  THEN s.name    END,
+		           CASE WHEN al.entity_type = 'holiday' THEN h.name    END,
+		           CASE WHEN al.entity_type = 'user' AND al.entity_id > 0 THEN u2.name END,
+		           ''
+		       ) AS entity_name
+		FROM admin_logs al
+		JOIN users u ON al.actor_id = u.id
+		LEFT JOIN teams    t  ON al.entity_type = 'team'    AND al.entity_id = t.id
+		LEFT JOIN statuses s  ON al.entity_type = 'status'  AND al.entity_id = s.id
+		LEFT JOIN holidays h  ON al.entity_type = 'holiday' AND al.entity_id = h.id
+		LEFT JOIN users    u2 ON al.entity_type = 'user'    AND al.entity_id = u2.id AND al.entity_id > 0
+		WHERE al.actor_id = ?
+		ORDER BY al.created_at DESC
+		LIMIT 1000
+	`, actorID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var logs []models.AdminLog
+	for rows.Next() {
+		var l models.AdminLog
+		if err := rows.Scan(&l.ID, &l.ActorID, &l.ActorName, &l.EntityType, &l.EntityID, &l.Action, &l.Details, &l.CreatedAt, &l.EntityName); err != nil {
 			return nil, err
 		}
 		logs = append(logs, l)

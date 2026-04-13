@@ -150,6 +150,19 @@ type PresenceLog struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+// AdminLog records an admin operation on an entity (team, status, holiday, user).
+type AdminLog struct {
+	ID         int64     `json:"id"`
+	ActorID    int64     `json:"actor_id"`
+	ActorName  string    `json:"actor_name"`
+	EntityType string    `json:"entity_type"` // "team", "status", "holiday", "user"
+	EntityID   int64     `json:"entity_id"`
+	EntityName string    `json:"entity_name"`
+	Action     string    `json:"action"`
+	Details    string    `json:"details"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 // PageData is the common data passed to all templates.
 type PageData struct {
 	Config      interface{}
