@@ -36,11 +36,11 @@
     <!-- Navigation -->
     <nav class="bg-gradient-to-r from-primary to-secondary shadow-lg" x-data="{ mobileMenu: false }">
         <div class="max-w-full mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-16">
+            <div class="flex items-center justify-between h-20">
                 <!-- Logo + App Name -->
                 <div class="flex items-center space-x-3">
                     {{if (index .Config "LogoURL")}}
-                    <img src="{{(index .Config "LogoURL")}}" alt="Logo" class="h-10 w-auto">
+                    <img src="{{(index .Config "LogoURL")}}" alt="Logo" class="h-16 w-auto">
                     {{else}}
                     <div class="h-8 w-8 bg-white/20 rounded flex items-center justify-center">
                         <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
