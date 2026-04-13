@@ -10,12 +10,6 @@ RUN apk add --no-cache git ca-certificates
 
 WORKDIR /build
 
-ENV GONOSUMDB=*
-ENV GOINSECURE=*
-ENV GOPRIVATE=*
-ENV GOPROXY=direct
-ENV GIT_SSL_NO_VERIFY=true
-
 # Copy go.mod first for dependency caching
 COPY go.mod ./
 RUN go mod download 2>/dev/null || true
