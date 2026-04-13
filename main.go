@@ -2,13 +2,14 @@ package main
 
 import (
 	"embed"
+	"encoding/json"
 	"html/template"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
-	"encoding/json"
+	"time"
 
 	"presence-app/internal/config"
 	"presence-app/internal/db"
@@ -180,6 +181,7 @@ func main() {
 	}
 
 	// Initialize handlers
+	healthHandler := &handlers.HealthHandler{DB: database, StartedAt: time.Now()}
 	authHandler := &handlers.AuthHandler{DB: database, Config: cfg, Render: renderPage}
 	calHandler := &handlers.CalendarHandler{DB: database, Render: renderPage}
 	adminHandler := &handlers.AdminHandler{DB: database, Render: renderPage}
@@ -214,6 +216,9 @@ func main() {
 		}
 		http.ServeFile(w, r, filepath.Join(cfg.DataDir, name))
 	})
+
+	// Health check (public, no auth)
+	mux.HandleFunc("GET /health", healthHandler.Health)
 
 	// Auth routes (public)
 	mux.Handle("GET /login", middleware.OptionalAuth(database, http.HandlerFunc(authHandler.LoginPage)))

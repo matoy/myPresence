@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Presence App
 
 <!-- Replace matoy/myPresence and matoy with actual values -->
@@ -130,6 +129,7 @@ Roles are assigned from the **🔑 Roles** page (accessible to `global` role onl
 | `/admin/cra` | `cra_viewer` | Activity Report — billable days by team |
 | `/admin/roles` | `global` | Assign roles to users |
 | `/admin/holidays` | `global` | Manage public holidays |
+| `/health` | *(none)* | Health check — public, no authentication |
 
 ---
 
@@ -204,6 +204,42 @@ my-super-app/
 
 ---
 
+## Health Check
+
+The endpoint `GET /health` is **public** (no session or authentication required) and is designed for monitoring systems.
+
+```bash
+curl http://localhost:8080/health
+```
+
+Example response:
+
+```json
+{
+  "status": "ok",
+  "uptime": "3h25m10s",
+  "checks": {
+    "database": "ok"
+  },
+  "time": "2026-04-13T12:00:00Z"
+}
+```
+
+| HTTP code | Meaning |
+|-----------|---------|
+| `200 OK` | All checks passed — application is healthy |
+| `503 Service Unavailable` | One or more checks failed (e.g. database unreachable) |
+
+The response includes:
+- **`status`**: `"ok"` or `"degraded"`
+- **`uptime`**: time since last container start
+- **`checks`**: individual check results (currently: `database`)
+- **`time`**: current UTC timestamp (ISO 8601)
+
+> Responses are never cached (`Cache-Control: no-store`).
+
+---
+
 ## Rebuilding After Changes
 
 Templates and static files are embedded (`//go:embed`) into the binary at build time. Any change requires a rebuild:
@@ -211,6 +247,3 @@ Templates and static files are embedded (`//go:embed`) into the binary at build 
 ```bash
 docker compose down && docker compose up -d --build
 ```
-=======
-# myPresence
->>>>>>> 14065b196b4edee9e6b2e85dfccf405f02a5f0f4
