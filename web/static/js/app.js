@@ -25,6 +25,14 @@ function calendarApp(statuses, currentUserId, isAdmin, presences) {
         contextMenuUserId: null,
         pendingHalf: 'full',
 
+        // Seat reservation modal state
+        showSeatModal: false,
+        seatFloorplans: [],
+        seatFloorplanID: 0,
+        seatModalSeats: [],
+        seatModalLoading: false,
+        selectedSeatID: null,
+
         // Check if a cell is blocked (weekend or non-imputable holiday)
         isCellBlocked(userId, date) {
             const cell = document.querySelector(`[data-user-id="${userId}"][data-date="${date}"]`);
@@ -245,6 +253,91 @@ function calendarApp(statuses, currentUserId, isAdmin, presences) {
             a.click();
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
+        },
+
+        // Returns the dates to use for bulk seat booking:
+        // the active drag-selection if any, otherwise just the right-clicked date.
+        getSeatBookingDates() {
+            if (this.selectedDates.length > 0) {
+                return this.selectedDates;
+            }
+            return this.contextMenuDate ? [this.contextMenuDate] : [];
+        },
+
+        // Open the seat picker modal, lazy-loading floorplans only.
+        // Seats are loaded when the user picks a plan from the dropdown.
+        async openSeatModal() {
+            this.showContextMenu = false;
+            this.showSeatModal = true;
+            this.seatModalLoading = true;
+            this.selectedSeatID = null;
+            this.seatModalSeats = [];
+            this.seatFloorplanID = 0;
+            try {
+                const resp = await fetch('/api/floorplans');
+                if (resp.ok) {
+                    this.seatFloorplans = await resp.json();
+                    // Auto-select the first plan and load its seats
+                    if (this.seatFloorplans.length > 0) {
+                        this.seatFloorplanID = this.seatFloorplans[0].id;
+                        await this.loadSeatModalSeats();
+                    }
+                }
+            } catch (e) {
+                // ignore - modal will show empty state
+            } finally {
+                this.seatModalLoading = false;
+            }
+        },
+
+        // Fetch seats for the currently selected floorplan in the modal.
+        async loadSeatModalSeats() {
+            if (!this.seatFloorplanID) return;
+            this.seatModalLoading = true;
+            this.selectedSeatID = null;
+            try {
+                const resp = await fetch(`/api/floorplans/${this.seatFloorplanID}/seats`);
+                if (resp.ok) {
+                    this.seatModalSeats = await resp.json();
+                }
+            } finally {
+                this.seatModalLoading = false;
+            }
+        },
+
+        // Submit bulk seat reservation for the active selection.
+        async bookSeatsForSelection() {
+            if (!this.selectedSeatID) return;
+            const dates = this.getSeatBookingDates();
+            if (!dates.length) return;
+            this.showSeatModal = false;
+            try {
+                await fetch('/api/reservations/bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        seat_id: this.selectedSeatID,
+                        dates: dates,
+                        half: this.pendingHalf
+                    })
+                });
+            } catch (e) { /* ignore */ }
+            window.location.reload();
+        },
+
+        // Cancel all seat reservations for the active selection.
+        async cancelSeatsForSelection() {
+            this.showContextMenu = false;
+            const dates = this.getSeatBookingDates();
+            if (!dates.length) return;
+            try {
+                await fetch('/api/reservations/bulk', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ dates })
+                });
+            } catch (e) { /* ignore */ }
+            window.location.reload();
         },
 
         // Clear all halves for the context menu target date

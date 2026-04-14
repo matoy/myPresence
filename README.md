@@ -15,11 +15,12 @@ A web application for managing employee presence and absences, built with Go and
 ## Features
 
 - **Personal monthly calendar**: each user enters their own presence/absences using click or drag-to-select; right-click a day to declare a half-day (AM or PM) with a different status per half
+- **Floor plans & desk reservations**: upload a floor map image, place clickable seats on it, and let users book desks directly from the calendar or the floor plan page
+- **REST API with Personal Access Tokens**: every feature is accessible via authenticated HTTP requests; users generate tokens with a chosen description and expiry; tokens carry no more permissions than the issuing user
+- **Team management**: assign users to teams
+- **Activity Report**: summary of billable days per team
 - **Customizable statuses**: color, label, billable flag (€)
 - **Public holidays**: displayed in grey on the calendar, with an optional imputation flag
-- **Team management**: assign users to teams
-- **Statistics**: view by team and user over a selected period
-- **Activity Report (CRA)**: summary of billable days per team
 - **Role management**: granular per-user permissions
 - **SAML 2.0 SSO**: Microsoft Entra ID (Azure AD) integration with automatic user provisioning
 
@@ -108,13 +109,14 @@ Roles are cumulative (stored as a comma-separated string per user). The `global`
 | Role | Access |
 |------|--------|
 | `basic` | Personal calendar (own presences only) |
-| `team_manager` | Team management + edit any user's presences |
+| `team_leader` | View calendar and activity report for own team |
+| `team_manager` | Team management + edit any user’s presences |
 | `status_manager` | Create / edit / delete presence statuses |
-| `stats_viewer` | View statistics by team |
-| `cra_viewer` | View Activity Report (billable days) by team |
-| `global` | Full access — includes role management and public holidays |
+| `activity_viewer` | View Activity Report (billable days) by team |
+| `floorplan_manager` | Create / edit floor plans and seats |
+| `global` | Full access — includes user/role management and public holidays |
 
-Roles are assigned from the **🔑 Roles** page (accessible to `global` role only).
+Roles are assigned from **👤 Users & Roles** (`/admin/users`), accessible to the `global` role only.
 
 ---
 
@@ -123,25 +125,115 @@ Roles are assigned from the **🔑 Roles** page (accessible to `global` role onl
 | URL | Required role | Description |
 |-----|---------------|-------------|
 | `/` | Any logged-in user | Personal monthly calendar |
-| `/admin/teams` | `team_manager` | Manage teams and members |
+| `/floorplan` | Any logged-in user | Floor plan viewer and desk reservation |
+| `/settings/tokens` | Any logged-in user | Manage Personal Access Tokens (API keys) |
+| `/admin/teams` | `team_manager` or `team_leader` | Manage teams and members |
 | `/admin/statuses` | `status_manager` | Manage presence statuses |
-| `/admin/activity` | `activity_viewer` | Activity report by team and period |
-| `/admin/cra` | `cra_viewer` | Activity Report — billable days by team |
-| `/admin/roles` | `global` | Assign roles to users |
+| `/admin/activity` | `activity_viewer` or `team_leader` | Activity report by team and period |
+| `/admin/floorplans` | `floorplan_manager` | Manage floor plans and seats |
 | `/admin/holidays` | `global` | Manage public holidays |
+| `/admin/users` | `global` | Manage users, roles and passwords |
+| `/admin/users/{id}/logs` | `global` | Presence audit log for a user |
 | `/health` | *(none)* | Health check — public, no authentication |
+| `/api/docs` | *(none)* | Full REST API documentation (plain text, public) |
+
+### Features
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DISABLE_FLOORPLANS` | `false` | Set to `true` to disable the floor plan module (page, seat reservation, admin) |
+| `DISABLE_API` | `false` | Set to `true` to disable the REST API entirely (PAT management, Bearer auth, `/api/docs`) |
+
+---
+
+## REST API
+
+myPresence exposes a full REST API that mirrors every user action available in the browser interface. All endpoints require authentication using a **Personal Access Token (PAT)**.
+
+### Personal Access Tokens
+
+Each user can generate tokens at **🔑 `/settings/tokens`** (accessible from the top-right menu).
+
+- Choose a **description** (e.g. *"Script de reporting"*) and an **expiry** (7, 30, 90, 365 days, or no expiry)
+- The raw token (prefixed `mpa_`) is shown **once** — copy it before closing the dialog
+- Tokens inherit **exactly** the permissions of the issuing user — no elevation, no restriction
+- Revocation is immediate; all integrations using the token stop working instantly
+
+### Authentication header
+
+```
+Authorization: Bearer mpa_<your-token>
+```
+
+### API documentation
+
+The full endpoint reference (request/response format for every route) is available at:
+
+- **In-app**: [`/api/docs`](http://localhost:8080/api/docs) — served as plain text, no authentication required
+- **In the repository**: [`API.md`](API.md)
+
+### Example
+
+```bash
+# Get your presences for April 2026
+curl -H "Authorization: Bearer mpa_yourtoken" \
+     "http://localhost:8080/api/presences?team_id=1&year=2026&month=4"
+
+# Set a presence
+curl -X POST -H "Authorization: Bearer mpa_yourtoken" \
+     -H "Content-Type: application/json" \
+     -d '{"user_id":5,"dates":["2026-04-14"],"status_id":3,"half":"full"}' \
+     http://localhost:8080/api/presences
+```
+
+---
+
+## Floor Plans & Desk Reservations
+
+The floor plan feature allows administrators to set up interactive office maps so users can book a specific desk directly from the calendar.
+
+### Admin setup (`floorplan_manager` role required)
+
+1. Go to **🗺️ Plans admin** in the navigation.
+2. Create one or more floor plans (e.g. *Floor 2*, *Open Space A*).
+3. Upload a background image (PNG, JPG, GIF, or WEBP) for each plan.
+4. Click anywhere on the image to place a seat and give it a short label (e.g. `A1`, `B12`).
+5. Drag-hover over an existing seat pin and click × to remove it.
+
+### User workflow
+
+- Navigate to **🗺️ Plans** to see the floor map for any date.
+  - Use the **← / →** arrows to navigate day by day.
+  - Switch between **Matin / Journée / Après-midi** to scope the reservation to a half-day.
+  - **Green** = free — click to book. **Blue** = your own reservation — click to cancel. **Red** = taken.
+- From the **calendar**, seat icons (🪑) appear on days where you have a reservation.
+  - **Right-click** one or more selected days → *Réserver un siège* to bulk-book a desk.
+  - **Right-click** → *Annuler réservation siège* to remove all your reservations on the selected days.
+
+### Rules
+
+- A seat can only be booked when the user has an **on-site** presence declared for that date.
+- Days without an on-site presence are silently skipped during bulk booking.
+- Each seat allows one reservation per `(seat, date, half)` combination.
 
 ---
 
 ## Calendar
 
-- Month navigation (← →)
-- Days selected by click or drag (range selection)
+- Month navigation (← →) and direct year/month selection
+- Days selected by **click** or **drag** (range selection); blocked on weekends and non-imputable holidays
+- After selection, a colour-coded **status picker** appears to apply or clear a presence
+- **Right-click** on any day opens a context menu to:
+  - Declare a **half-day** (AM or PM) with an independent status per half
+  - Insert the day’s status into your **calendar client** as an `.ics` event (Outlook, Google Calendar, etc.)
+  - **Reserve a desk** on the selected period (see [Floor Plans](#floor-plans--desk-reservations))
+  - **Cancel desk reservation(s)** on the selected period
+  - Clear all presences for the day
+- Days with a desk reservation display a 🪑 icon
+- Hovering over a cell shows a tooltip with the status name or holiday name
 - **Weekends** are greyed out and cannot be selected
 - **Public holidays** are greyed out and non-selectable by default
   - *Allow imputed* option: the holiday remains visually grey but can receive a status
-- After selection, a colour-coded status picker appears to apply or clear a presence
-- Hovering over a cell shows a tooltip with the status name or holiday name
 
 ---
 
@@ -149,37 +241,38 @@ Roles are assigned from the **🔑 Roles** page (accessible to `global` role onl
 
 Automatically seeded on first startup:
 
-| Name | Color | Billable |
-|------|-------|----------|
-| On-site | 🟢 green | Yes |
-| Remote (télétravail) | 🟣 purple | Yes |
-| Business trip | 🔵 blue | Yes |
-| Leave | 🟠 orange | No |
-| Sick leave | 🔴 red | No |
-| Training | 🟡 yellow | No |
-| Absence | ⚫ grey | No |
+| Name | Color | Billable | On-site |
+|------|-------|----------|---------|
+| Présent sur site | 🟢 green | Yes | Yes |
+| Télétravail | 🟣 purple | Yes | No |
+| Déplacement | 🔵 blue | Yes | Yes |
+| Congé | 🟠 orange | No | No |
+| Maladie | 🔴 red | No | No |
+| Formation | 🟡 yellow | No | No |
+| Absence | ⚫ grey | No | No |
 
-All statuses are fully editable from `/admin/statuses`.
+All statuses are fully editable from `/admin/statuses`. The **On-site** flag determines whether a desk reservation is allowed for that day.
 
 ---
 
 ## Technical Architecture
 
 ```
-my-super-app/
+myPresence/
 ├── Dockerfile              # Multi-stage build: Go → Alpine runtime
 ├── docker-compose.yml
 ├── main.go                 # Router, middleware wiring, template rendering
+├── funcs.go                # Pure template helper functions (tested separately)
 ├── internal/
 │   ├── config/             # Configuration loader (env vars)
-│   ├── db/                 # Database layer (migrations, CRUD)
-│   ├── handlers/           # HTTP handlers (calendar, admin, auth, cra, holidays)
+│   ├── db/                 # Database layer (migrations, CRUD, seat reservations)
+│   ├── handlers/           # HTTP handlers (calendar, activity, floorplan, admin, auth)
 │   ├── middleware/         # Auth session, RequireRole() factory
 │   └── models/             # Data structs and role constants
 └── web/
     ├── static/
     │   ├── css/app.css
-    │   └── js/app.js       # Alpine.js — drag-select calendar, admin AJAX
+    │   └── js/app.js       # Alpine.js — drag-select calendar, half-day, seat modal, admin AJAX
     └── templates/          # Go HTML templates (layout + pages)
 ```
 
@@ -193,14 +286,19 @@ my-super-app/
 
 | Table | Description |
 |-------|-------------|
-| `users` | Users (email, name, roles, password hash) |
+| `users` | Users (email, name, roles as comma-separated string, optional password hash) |
 | `teams` | Teams |
 | `user_teams` | User ↔ team many-to-many mapping |
-| `statuses` | Presence statuses (name, color, billable, sort order) |
-| `presences` | Recorded presences (user_id, date YYYY-MM-DD, status_id) |
-| `presence_logs` | Audit log of all set/clear presence actions (actor, target user, date, status) |
+| `statuses` | Presence statuses (name, color, billable, on_site flag, sort order) |
+| `presences` | Recorded presences (user_id, date YYYY-MM-DD, half `full`/`AM`/`PM`, status_id) |
+| `presence_logs` | Audit log of all set/clear presence actions (actor, target user, date, half, status) |
+| `admin_logs` | Audit log of admin operations on entities (teams, statuses, holidays, users) |
 | `sessions` | Active sessions (token, user_id, 30-day expiry) |
 | `holidays` | Public holidays (date, name, allow_imputed) |
+| `floorplans` | Floor map definitions (name, image path, sort order) |
+| `seats` | Seats placed on a floorplan (label, x/y position as percentage of image) |
+| `seat_reservations` | Seat bookings (seat_id, user_id, date, half — unique per seat+date+half) |
+| `personal_access_tokens` | API tokens (description, SHA-256 hash, prefix, expiry, last-used timestamp, user_id) |
 
 ---
 

@@ -21,8 +21,9 @@ var frenchDays = [...]string{"Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"}
 
 // CalendarHandler handles the main calendar view.
 type CalendarHandler struct {
-	DB     *db.DB
-	Render func(w http.ResponseWriter, r *http.Request, page string, data interface{})
+	DB                *db.DB
+	Render            func(w http.ResponseWriter, r *http.Request, page string, data interface{})
+	DisableFloorplans bool
 }
 
 // CalendarPage renders the monthly calendar view for the logged-in user.
@@ -75,21 +76,34 @@ func (h *CalendarHandler) CalendarPage(w http.ResponseWriter, r *http.Request) {
 		userPresences = make(map[string]map[string]int64)
 	}
 
+	// Get seat reservations and floorplans (skipped when floor plans are disabled)
+	var reservationDates map[string]bool
+	var floorplans []models.Floorplan
+	if !h.DisableFloorplans {
+		reservationDates, _ = h.DB.GetUserReservationDates(user.ID, startDate, endDate)
+		floorplans, _ = h.DB.ListFloorplans()
+	}
+	if reservationDates == nil {
+		reservationDates = make(map[string]bool)
+	}
+
 	// Get statuses
 	statuses, _ := h.DB.ListStatuses()
 
 	h.Render(w, r, "calendar", map[string]interface{}{
-		"Year":          year,
-		"Month":         month,
-		"MonthName":     frenchMonths[month],
-		"PrevYear":      prevTime.Year(),
-		"PrevMonth":     int(prevTime.Month()),
-		"NextYear":      nextTime.Year(),
-		"NextMonth":     int(nextTime.Month()),
-		"Days":          days,
-		"Presences":     userPresences,
-		"Statuses":      statuses,
-		"CurrentUserID": user.ID,
+		"Year":             year,
+		"Month":            month,
+		"MonthName":        frenchMonths[month],
+		"PrevYear":         prevTime.Year(),
+		"PrevMonth":        int(prevTime.Month()),
+		"NextYear":         nextTime.Year(),
+		"NextMonth":        int(nextTime.Month()),
+		"Days":             days,
+		"Presences":        userPresences,
+		"Statuses":         statuses,
+		"CurrentUserID":    user.ID,
+		"ReservationDates": reservationDates,
+		"Floorplans":       floorplans,
 	})
 }
 

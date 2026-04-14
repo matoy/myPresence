@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
+	"strings"
 	"time"
 
 	"presence-app/internal/config"
@@ -24,6 +24,9 @@ var templateFS embed.FS
 
 //go:embed web/static
 var staticFS embed.FS
+
+//go:embed API.md
+var apiDocContent []byte
 
 func main() {
 	cfg := config.Load()
@@ -101,50 +104,16 @@ func main() {
 			return total
 		},
 		// Float64 variants for half-day support
-		"getCountF": func(m map[int64]float64, key int64) float64 {
-			return m[key]
-		},
-		"getStrCountF": func(m map[string]float64, key string) float64 {
-			return m[key]
-		},
-		"sumMapF": func(m map[int64]float64) float64 {
-			total := 0.0
-			for _, v := range m {
-				total += v
-			}
-			return total
-		},
-		"fmtF": func(f float64) string {
-			if f == float64(int64(f)) {
-				return strconv.FormatInt(int64(f), 10)
-			}
-			return strconv.FormatFloat(f, 'f', 1, 64)
-		},
-		"percentF": func(a, b float64) int {
-			if b == 0 {
-				return 0
-			}
-			return int(a * 100 / b)
-		},
-		"i2f": func(i int) float64 {
-			return float64(i)
-		},
-		"subF": func(a, b float64) float64 {
-			return a - b
-		},
+		"getCountF":    tmplGetCountF,
+		"getStrCountF": tmplGetStrCountF,
+		"sumMapF":      tmplSumMapF,
+		"fmtF":         tmplFmtF,
+		"percentF":     tmplPercentF,
+		"i2f":          tmplI2F,
+		"subF":         tmplSubF,
 		// Presence half-day helpers for templates
-		"presenceHalf": func(m map[string]map[string]int64, date, half string) int64 {
-			if halves, ok := m[date]; ok {
-				return halves[half]
-			}
-			return 0
-		},
-		"hasDatePresence": func(m map[string]map[string]int64, date string) bool {
-			if halves, ok := m[date]; ok {
-				return len(halves) > 0
-			}
-			return false
-		},
+		"presenceHalf":    tmplPresenceHalf,
+		"hasDatePresence": tmplHasDatePresence,
 		"dict": func(pairs ...interface{}) map[string]interface{} {
 			d := make(map[string]interface{})
 			for i := 0; i < len(pairs)-1; i += 2 {
@@ -153,12 +122,7 @@ func main() {
 			return d
 		},
 		"intToInt64": func(i int) int64 { return int64(i) },
-		"percent": func(a, b int) int {
-			if b == 0 {
-				return 0
-			}
-			return a * 100 / b
-		},
+		"percent": tmplPercent,
 		"hasRole": func(user *models.User, role string) bool {
 			if user == nil {
 				return false
@@ -168,7 +132,7 @@ func main() {
 	}
 
 	templates := make(map[string]*template.Template)
-	pages := []string{"login", "calendar", "admin_teams", "admin_statuses", "admin_activity", "admin_holidays", "admin_users", "admin_user_logs"}
+	pages := []string{"login", "calendar", "admin_teams", "admin_statuses", "admin_activity", "admin_holidays", "admin_users", "admin_user_logs", "floorplan", "admin_floorplans", "pat"}
 	for _, page := range pages {
 		t, err := template.New("").Funcs(funcMap).ParseFS(
 			templateFS,
@@ -206,12 +170,14 @@ func main() {
 				"FontFamily":     cfg.FontFamily,
 				"FontFamilyMono": cfg.FontFamilyMono,
 			},
-			User:        user,
-			Page:        page,
-			Data:        data,
-			SAMLEnabled: cfg.SAMLEnabled,
-			HideFooter:  cfg.HideFooter,
-			AppVersion:  config.Version,
+		User:              user,
+		Page:              page,
+		Data:              data,
+		SAMLEnabled:       cfg.SAMLEnabled,
+		HideFooter:        cfg.HideFooter,
+		AppVersion:        config.Version,
+		DisableFloorplans: cfg.DisableFloorplans,
+		DisableAPI:        cfg.DisableAPI,
 		}
 		_ = logoExists
 		// Add logo flag to config map
@@ -234,11 +200,16 @@ func main() {
 	// Initialize handlers
 	healthHandler := &handlers.HealthHandler{DB: database, StartedAt: time.Now()}
 	authHandler := &handlers.AuthHandler{DB: database, Config: cfg, Render: renderPage}
-	calHandler := &handlers.CalendarHandler{DB: database, Render: renderPage}
+	calHandler := &handlers.CalendarHandler{DB: database, Render: renderPage, DisableFloorplans: cfg.DisableFloorplans}
 	adminHandler := &handlers.AdminHandler{DB: database, Render: renderPage}
 	activityHandler := &handlers.ActivityHandler{DB: database, Render: renderPage}
 	holidaysHandler := &handlers.HolidaysHandler{DB: database, Render: renderPage}
 	usersAdminHandler := &handlers.UsersAdminHandler{DB: database, Render: renderPage}
+	floorplanHandler := &handlers.FloorplanHandler{DB: database, DataDir: cfg.DataDir, Render: renderPage}
+	var patHandler *handlers.PATHandler
+	if !cfg.DisableAPI {
+		patHandler = &handlers.PATHandler{DB: database, Render: renderPage}
+	}
 
 	// Initialize SAML if configured
 	if cfg.SAMLEnabled {
@@ -256,6 +227,25 @@ func main() {
 	staticSub, _ := fs.Sub(staticFS, "web/static")
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(staticSub)))
 
+	// Serve floorplan images from data directory
+	if !cfg.DisableFloorplans {
+		mux.HandleFunc("GET /floorplan-img/", func(w http.ResponseWriter, r *http.Request) {
+			name := filepath.Base(r.URL.Path)
+			// Only serve files matching expected pattern: floorplan_<id>.<ext>
+			if !strings.HasPrefix(name, "floorplan_") {
+				http.NotFound(w, r)
+				return
+			}
+			ext := strings.ToLower(filepath.Ext(name))
+			allowed := map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true}
+			if !allowed[ext] {
+				http.NotFound(w, r)
+				return
+			}
+			http.ServeFile(w, r, filepath.Join(cfg.DataDir, name))
+		})
+	}
+
 	// Serve logo and data files
 	mux.HandleFunc("GET /data/", func(w http.ResponseWriter, r *http.Request) {
 		// Only serve specific safe files from data dir
@@ -270,6 +260,15 @@ func main() {
 
 	// Health check (public, no auth)
 	mux.HandleFunc("GET /health", healthHandler.Health)
+
+	// API documentation (public, disabled when DISABLE_API=true)
+	if !cfg.DisableAPI {
+		mux.HandleFunc("GET /api/docs", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+			w.Write(apiDocContent)
+		})
+	}
 
 	// Auth routes (public)
 	mux.Handle("GET /login", middleware.OptionalAuth(database, http.HandlerFunc(authHandler.LoginPage)))
@@ -292,6 +291,26 @@ func main() {
 	authMux.HandleFunc("POST /api/presences", calHandler.SetPresences)
 	authMux.HandleFunc("POST /api/presences/clear", calHandler.ClearPresences)
 	authMux.HandleFunc("GET /api/presences", calHandler.GetPresencesAPI)
+
+	// Personal Access Token management
+	if !cfg.DisableAPI {
+		authMux.HandleFunc("GET /settings/tokens", patHandler.PATPage)
+		authMux.HandleFunc("GET /api/tokens", patHandler.ListPATs)
+		authMux.HandleFunc("POST /api/tokens", patHandler.CreatePAT)
+		authMux.HandleFunc("DELETE /api/tokens/{id}", patHandler.RevokePAT)
+	}
+
+	// Floorplan user routes
+	if !cfg.DisableFloorplans {
+		authMux.HandleFunc("GET /floorplan", floorplanHandler.FloorplanPage)
+		authMux.HandleFunc("GET /api/seats", floorplanHandler.SeatsAPI)
+		authMux.HandleFunc("GET /api/floorplans", floorplanHandler.ListFloorplansAPI)
+		authMux.HandleFunc("GET /api/floorplans/{id}/seats", floorplanHandler.ListSeatsForFloorplanAPI)
+		authMux.HandleFunc("POST /api/reservations", floorplanHandler.ReserveSeat)
+		authMux.HandleFunc("POST /api/reservations/bulk", floorplanHandler.BulkReserveSeats)
+		authMux.HandleFunc("DELETE /api/reservations/bulk", floorplanHandler.CancelReservationsByDates)
+		authMux.HandleFunc("DELETE /api/reservations/{id}", floorplanHandler.CancelReservation)
+	}
 
 	// Admin routes - each section guarded by its own role
 	teamMux := http.NewServeMux()
@@ -346,7 +365,24 @@ func main() {
 	mux.Handle("/api/users/", middleware.Auth(database, middleware.RequireRole(models.RoleGlobal)(usersMux)))
 	mux.Handle("/admin/users", middleware.Auth(database, middleware.RequireRole(models.RoleGlobal)(usersMux)))
 	mux.Handle("/admin/users/", middleware.Auth(database, middleware.RequireRole(models.RoleGlobal)(usersMux)))
-	mux.Handle("/", middleware.Auth(database, authMux))
+	if !cfg.DisableFloorplans {
+		// Floorplan admin routes
+		fpAdminMux := http.NewServeMux()
+		fpAdminMux.HandleFunc("GET /admin/floorplans", floorplanHandler.AdminFloorplansPage)
+		fpAdminMux.HandleFunc("POST /admin/floorplans", floorplanHandler.CreateFloorplan)
+		fpAdminMux.HandleFunc("PUT /admin/floorplans/{id}", floorplanHandler.UpdateFloorplan)
+		fpAdminMux.HandleFunc("DELETE /admin/floorplans/{id}", floorplanHandler.DeleteFloorplan)
+		fpAdminMux.HandleFunc("POST /admin/floorplans/{id}/image", floorplanHandler.UploadFloorplanImage)
+		fpAdminMux.HandleFunc("POST /admin/floorplans/{id}/seats", floorplanHandler.CreateSeat)
+		fpAdminMux.HandleFunc("PUT /admin/seats/{id}", floorplanHandler.UpdateSeat)
+		fpAdminMux.HandleFunc("DELETE /admin/seats/{id}", floorplanHandler.DeleteSeat)
+		fpAdminMux.HandleFunc("GET /api/admin/seats", floorplanHandler.AdminListSeats)
+		mux.Handle("/admin/floorplans", middleware.Auth(database, middleware.RequireRole(models.RoleFloorplanManager)(fpAdminMux)))
+		mux.Handle("/admin/floorplans/", middleware.Auth(database, middleware.RequireRole(models.RoleFloorplanManager)(fpAdminMux)))
+		mux.Handle("/admin/seats/", middleware.Auth(database, middleware.RequireRole(models.RoleFloorplanManager)(fpAdminMux)))
+		mux.Handle("/api/admin/", middleware.Auth(database, middleware.RequireRole(models.RoleFloorplanManager)(fpAdminMux)))
+	}
+	mux.Handle("/", middleware.AuthWithOptions(database, !cfg.DisableAPI, authMux))
 
 	// Start server
 	addr := ":" + cfg.Port

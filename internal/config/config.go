@@ -38,6 +38,10 @@ type Config struct {
 	SAMLRootURL        string
 	SAMLCertFile       string
 	SAMLKeyFile        string
+
+	// Features
+	DisableFloorplans bool
+	DisableAPI        bool
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -67,6 +71,9 @@ func Load() *Config {
 		SAMLRootURL:        getEnv("SAML_ROOT_URL", ""),
 		SAMLCertFile:       getEnv("SAML_SP_CERT_FILE", ""),
 		SAMLKeyFile:        getEnv("SAML_SP_KEY_FILE", ""),
+
+		DisableFloorplans: getEnvBool("DISABLE_FLOORPLANS", false),
+		DisableAPI:        getEnvBool("DISABLE_API", false),
 	}
 	c.SAMLEnabled = c.SAMLIDPMetadataURL != "" && c.SAMLEntityID != ""
 	return c

@@ -2,6 +2,7 @@ package db
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
@@ -158,6 +159,46 @@ func (d *DB) migrate() error {
 	// Add half column to presence_logs (idempotent)
 	d.Exec(`ALTER TABLE presence_logs ADD COLUMN half TEXT NOT NULL DEFAULT 'full'`)
 
+	// Floorplan tables (idempotent)
+	d.Exec(`CREATE TABLE IF NOT EXISTS floorplans (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT NOT NULL,
+		image_path TEXT NOT NULL DEFAULT '',
+		sort_order INTEGER NOT NULL DEFAULT 0
+	)`)
+	d.Exec(`CREATE TABLE IF NOT EXISTS seats (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		floorplan_id INTEGER NOT NULL,
+		label TEXT NOT NULL,
+		x_pct REAL NOT NULL DEFAULT 0,
+		y_pct REAL NOT NULL DEFAULT 0,
+		FOREIGN KEY (floorplan_id) REFERENCES floorplans(id) ON DELETE CASCADE
+	)`)
+	d.Exec(`CREATE TABLE IF NOT EXISTS seat_reservations (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		seat_id INTEGER NOT NULL,
+		user_id INTEGER NOT NULL,
+		date TEXT NOT NULL,
+		half TEXT NOT NULL DEFAULT 'full',
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		UNIQUE(seat_id, date, half),
+		FOREIGN KEY (seat_id) REFERENCES seats(id) ON DELETE CASCADE,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	)`)
+
+	// Personal Access Tokens (idempotent)
+	d.Exec(`CREATE TABLE IF NOT EXISTS personal_access_tokens (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER NOT NULL,
+		description TEXT NOT NULL DEFAULT '',
+		token_hash TEXT NOT NULL UNIQUE,
+		token_prefix TEXT NOT NULL,
+		expires_at DATETIME,
+		last_used_at DATETIME,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	)`)
+
 	return nil
 }
 
@@ -261,7 +302,109 @@ func (d *DB) CleanExpiredSessions() {
 	d.Exec("DELETE FROM sessions WHERE expires_at < datetime('now')")
 }
 
-// --- User management ---
+// --- Personal Access Tokens ---
+
+// CreatePAT generates a new PAT (prefix "mpa_"), stores its SHA-256 hash, and returns the raw token.
+func (d *DB) CreatePAT(userID int64, description string, expiresAt *time.Time) (string, *models.PersonalAccessToken, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", nil, err
+	}
+	raw := "mpa_" + hex.EncodeToString(b)
+	sum := sha256.Sum256([]byte(raw))
+	tokenHash := hex.EncodeToString(sum[:])
+	prefix := raw[:12] // "mpa_" + first 8 hex chars
+
+	var expiresSQL interface{}
+	if expiresAt != nil {
+		expiresSQL = expiresAt.UTC().Format("2006-01-02 15:04:05")
+	}
+
+	result, err := d.Exec(
+		`INSERT INTO personal_access_tokens (user_id, description, token_hash, token_prefix, expires_at) VALUES (?, ?, ?, ?, ?)`,
+		userID, description, tokenHash, prefix, expiresSQL,
+	)
+	if err != nil {
+		return "", nil, err
+	}
+	id, _ := result.LastInsertId()
+	pat := &models.PersonalAccessToken{
+		ID:          id,
+		UserID:      userID,
+		Description: description,
+		TokenPrefix: prefix,
+		ExpiresAt:   expiresAt,
+		CreatedAt:   time.Now(),
+	}
+	return raw, pat, nil
+}
+
+// ListUserPATs returns all PATs for a user (token hash never included).
+func (d *DB) ListUserPATs(userID int64) ([]models.PersonalAccessToken, error) {
+	rows, err := d.Query(`
+		SELECT id, user_id, description, token_prefix, expires_at, last_used_at, created_at
+		FROM personal_access_tokens
+		WHERE user_id = ?
+		ORDER BY created_at DESC
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var pats []models.PersonalAccessToken
+	for rows.Next() {
+		var p models.PersonalAccessToken
+		var expiresAt, lastUsedAt sql.NullTime
+		if err := rows.Scan(&p.ID, &p.UserID, &p.Description, &p.TokenPrefix, &expiresAt, &lastUsedAt, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		if expiresAt.Valid {
+			p.ExpiresAt = &expiresAt.Time
+		}
+		if lastUsedAt.Valid {
+			p.LastUsedAt = &lastUsedAt.Time
+		}
+		pats = append(pats, p)
+	}
+	return pats, rows.Err()
+}
+
+// RevokePAT deletes a PAT owned by the given user.
+func (d *DB) RevokePAT(id, userID int64) error {
+	res, err := d.Exec(`DELETE FROM personal_access_tokens WHERE id = ? AND user_id = ?`, id, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("token not found")
+	}
+	return nil
+}
+
+// GetUserByPAT verifies a raw PAT (SHA-256 hash match) and returns the owning user.
+// It also updates last_used_at asynchronously.
+func (d *DB) GetUserByPAT(token string) (*models.User, error) {
+	sum := sha256.Sum256([]byte(token))
+	tokenHash := hex.EncodeToString(sum[:])
+
+	var u models.User
+	err := d.QueryRow(`
+		SELECT u.id, u.email, u.name, u.role, COALESCE(u.password_hash,''), u.disabled, u.created_at
+		FROM personal_access_tokens t
+		JOIN users u ON t.user_id = u.id
+		WHERE t.token_hash = ?
+		  AND (t.expires_at IS NULL OR t.expires_at > datetime('now'))
+		  AND u.disabled = 0
+	`, tokenHash).Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	u.IsLocal = u.PasswordHash != ""
+	go d.Exec(`UPDATE personal_access_tokens SET last_used_at = datetime('now') WHERE token_hash = ?`, tokenHash) //nolint
+	return &u, nil
+}
 
 // GetUserByEmail finds a user by email.
 func (d *DB) GetUserByEmail(email string) (*models.User, error) {
@@ -329,7 +472,7 @@ func (d *DB) UpdateUserRoles(id int64, roles string) error {
 	valid := map[string]bool{
 		models.RoleBasic: true, models.RoleTeamManager: true,
 		models.RoleTeamLeader: true, models.RoleStatusManager: true,
-		models.RoleActivityViewer: true,
+		models.RoleActivityViewer: true, models.RoleFloorplanManager: true,
 		models.RoleGlobal: true,
 	}
 	for _, r := range strings.Split(roles, ",") {
@@ -922,4 +1065,263 @@ func (d *DB) GetAdminLogsByActor(actorID int64, since time.Time) ([]models.Admin
 		logs = append(logs, l)
 	}
 	return logs, rows.Err()
+}
+
+// --- Floorplan management ---
+
+// ListFloorplans returns all floorplans ordered by sort_order.
+func (d *DB) ListFloorplans() ([]models.Floorplan, error) {
+	rows, err := d.Query("SELECT id, name, image_path, sort_order FROM floorplans ORDER BY sort_order, id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var fps []models.Floorplan
+	for rows.Next() {
+		var f models.Floorplan
+		if err := rows.Scan(&f.ID, &f.Name, &f.ImagePath, &f.SortOrder); err != nil {
+			return nil, err
+		}
+		fps = append(fps, f)
+	}
+	return fps, rows.Err()
+}
+
+// GetFloorplan returns a single floorplan by ID.
+func (d *DB) GetFloorplan(id int64) (*models.Floorplan, error) {
+	var f models.Floorplan
+	err := d.QueryRow("SELECT id, name, image_path, sort_order FROM floorplans WHERE id = ?", id).
+		Scan(&f.ID, &f.Name, &f.ImagePath, &f.SortOrder)
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
+// CreateFloorplan creates a new floorplan.
+func (d *DB) CreateFloorplan(name string, sortOrder int) (int64, error) {
+	res, err := d.Exec("INSERT INTO floorplans (name, sort_order) VALUES (?, ?)", name, sortOrder)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// UpdateFloorplan updates a floorplan's name and sort order.
+func (d *DB) UpdateFloorplan(id int64, name string, sortOrder int) error {
+	_, err := d.Exec("UPDATE floorplans SET name = ?, sort_order = ? WHERE id = ?", name, sortOrder, id)
+	return err
+}
+
+// SetFloorplanImage stores the image path for a floorplan.
+func (d *DB) SetFloorplanImage(id int64, imagePath string) error {
+	_, err := d.Exec("UPDATE floorplans SET image_path = ? WHERE id = ?", imagePath, id)
+	return err
+}
+
+// DeleteFloorplan removes a floorplan and all its seats.
+func (d *DB) DeleteFloorplan(id int64) error {
+	_, err := d.Exec("DELETE FROM floorplans WHERE id = ?", id)
+	return err
+}
+
+// ListSeats returns all seats for a floorplan.
+func (d *DB) ListSeats(floorplanID int64) ([]models.Seat, error) {
+	rows, err := d.Query("SELECT id, floorplan_id, label, x_pct, y_pct FROM seats WHERE floorplan_id = ? ORDER BY id", floorplanID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var seats []models.Seat
+	for rows.Next() {
+		var s models.Seat
+		if err := rows.Scan(&s.ID, &s.FloorplanID, &s.Label, &s.XPct, &s.YPct); err != nil {
+			return nil, err
+		}
+		seats = append(seats, s)
+	}
+	return seats, rows.Err()
+}
+
+// CreateSeat adds a seat to a floorplan.
+func (d *DB) CreateSeat(floorplanID int64, label string, xPct, yPct float64) (int64, error) {
+	res, err := d.Exec("INSERT INTO seats (floorplan_id, label, x_pct, y_pct) VALUES (?, ?, ?, ?)", floorplanID, label, xPct, yPct)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// UpdateSeat updates a seat's label and position.
+func (d *DB) UpdateSeat(id int64, label string, xPct, yPct float64) error {
+	_, err := d.Exec("UPDATE seats SET label = ?, x_pct = ?, y_pct = ? WHERE id = ?", label, xPct, yPct, id)
+	return err
+}
+
+// DeleteSeat removes a seat.
+func (d *DB) DeleteSeat(id int64) error {
+	_, err := d.Exec("DELETE FROM seats WHERE id = ?", id)
+	return err
+}
+
+// GetSeatsWithStatus returns all seats enriched with booking status for a given user/date/half.
+func (d *DB) GetSeatsWithStatus(floorplanID, userID int64, date, half string) ([]models.SeatWithStatus, error) {
+	seats, err := d.ListSeats(floorplanID)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := d.Query(`
+		SELECT sr.seat_id, sr.user_id, sr.half, sr.id
+		FROM seat_reservations sr
+		JOIN seats s ON sr.seat_id = s.id
+		WHERE s.floorplan_id = ? AND sr.date = ?
+	`, floorplanID, date)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	type resEntry struct {
+		uid   int64
+		h     string
+		resID int64
+	}
+	reserved := make(map[int64][]resEntry)
+	for rows.Next() {
+		var seatID, uid, resID int64
+		var h string
+		if err := rows.Scan(&seatID, &uid, &h, &resID); err != nil {
+			return nil, err
+		}
+		reserved[seatID] = append(reserved[seatID], resEntry{uid, h, resID})
+	}
+
+	result := make([]models.SeatWithStatus, len(seats))
+	for i, s := range seats {
+		status := "free"
+		var myResID int64
+		for _, r := range reserved[s.ID] {
+			conflicts := r.h == "full" || half == "full" || r.h == half
+			if !conflicts {
+				continue
+			}
+			if r.uid == userID {
+				status = "mine"
+				myResID = r.resID
+			} else if status != "mine" {
+				status = "taken"
+			}
+		}
+		result[i] = models.SeatWithStatus{Seat: s, Status: status, ReservationID: myResID}
+	}
+	return result, nil
+}
+
+// ReserveSeat books a seat for a user. Returns an error if already taken or if the
+// user already has a different seat reservation on the same day.
+func (d *DB) ReserveSeat(seatID, userID int64, date, half string) error {
+	if half == "" {
+		half = "full"
+	}
+	// Check the seat is not already taken for that period.
+	var count int
+	d.QueryRow(`
+		SELECT COUNT(*) FROM seat_reservations
+		WHERE seat_id = ? AND date = ? AND (half = ? OR half = 'full' OR ? = 'full')
+	`, seatID, date, half, half).Scan(&count)
+	if count > 0 {
+		return fmt.Errorf("ce siège est déjà réservé pour cette période")
+	}
+	// Check the user does not already have a reservation on that day (any seat).
+	var userCount int
+	d.QueryRow(`
+		SELECT COUNT(*) FROM seat_reservations
+		WHERE user_id = ? AND date = ? AND (half = ? OR half = 'full' OR ? = 'full')
+	`, userID, date, half, half).Scan(&userCount)
+	if userCount > 0 {
+		return fmt.Errorf("vous avez déjà réservé un siège pour cette journée")
+	}
+	_, err := d.Exec(
+		"INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, ?, ?)",
+		seatID, userID, date, half,
+	)
+	return err
+}
+
+// CancelReservation removes a reservation (only the owner can cancel).
+func (d *DB) CancelReservation(reservationID, userID int64) error {
+	_, err := d.Exec("DELETE FROM seat_reservations WHERE id = ? AND user_id = ?", reservationID, userID)
+	return err
+}
+
+// GetUserOnSiteStatus checks whether a user has an on-site presence for the given date.
+func (d *DB) GetUserOnSiteStatus(userID int64, date string) (bool, error) {
+	var count int
+	err := d.QueryRow(`
+		SELECT COUNT(*) FROM presences p
+		JOIN statuses s ON p.status_id = s.id
+		WHERE p.user_id = ? AND p.date = ? AND s.on_site = 1
+	`, userID, date).Scan(&count)
+	return count > 0, err
+}
+
+// GetUserReservationDates returns the set of dates within [startDate, endDate] for which
+// the user has at least one seat reservation. The map value is always true.
+func (d *DB) GetUserReservationDates(userID int64, startDate, endDate string) (map[string]bool, error) {
+	rows, err := d.Query(
+		`SELECT DISTINCT date FROM seat_reservations WHERE user_id = ? AND date >= ? AND date <= ?`,
+		userID, startDate, endDate,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := make(map[string]bool)
+	for rows.Next() {
+		var date string
+		if err := rows.Scan(&date); err != nil {
+			return nil, err
+		}
+		m[date] = true
+	}
+	return m, rows.Err()
+}
+
+// BulkReserveSeat attempts to reserve seatID for userID on each of the given dates.
+// It silently skips dates where the user is not on-site or the seat is already taken.
+// Returns the number of successful bookings.
+func (d *DB) BulkReserveSeat(seatID, userID int64, dates []string, half string) int {
+	if half == "" {
+		half = "full"
+	}
+	count := 0
+	for _, date := range dates {
+		isOnSite, _ := d.GetUserOnSiteStatus(userID, date)
+		if !isOnSite {
+			continue
+		}
+		if err := d.ReserveSeat(seatID, userID, date, half); err == nil {
+			count++
+		}
+	}
+	return count
+}
+
+// CancelUserReservationsForDates removes all seat reservations for userID on the given dates.
+func (d *DB) CancelUserReservationsForDates(userID int64, dates []string) error {
+	if len(dates) == 0 {
+		return nil
+	}
+	placeholders := make([]string, len(dates))
+	args := []interface{}{userID}
+	for i, date := range dates {
+		placeholders[i] = "?"
+		args = append(args, date)
+	}
+	_, err := d.Exec(
+		"DELETE FROM seat_reservations WHERE user_id = ? AND date IN ("+strings.Join(placeholders, ",")+")",
+		args...,
+	)
+	return err
 }
