@@ -2,6 +2,7 @@ package db
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
@@ -185,6 +186,19 @@ func (d *DB) migrate() error {
 		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 	)`)
 
+	// Personal Access Tokens (idempotent)
+	d.Exec(`CREATE TABLE IF NOT EXISTS personal_access_tokens (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		user_id INTEGER NOT NULL,
+		description TEXT NOT NULL DEFAULT '',
+		token_hash TEXT NOT NULL UNIQUE,
+		token_prefix TEXT NOT NULL,
+		expires_at DATETIME,
+		last_used_at DATETIME,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+	)`)
+
 	return nil
 }
 
@@ -288,7 +302,109 @@ func (d *DB) CleanExpiredSessions() {
 	d.Exec("DELETE FROM sessions WHERE expires_at < datetime('now')")
 }
 
-// --- User management ---
+// --- Personal Access Tokens ---
+
+// CreatePAT generates a new PAT (prefix "mpa_"), stores its SHA-256 hash, and returns the raw token.
+func (d *DB) CreatePAT(userID int64, description string, expiresAt *time.Time) (string, *models.PersonalAccessToken, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", nil, err
+	}
+	raw := "mpa_" + hex.EncodeToString(b)
+	sum := sha256.Sum256([]byte(raw))
+	tokenHash := hex.EncodeToString(sum[:])
+	prefix := raw[:12] // "mpa_" + first 8 hex chars
+
+	var expiresSQL interface{}
+	if expiresAt != nil {
+		expiresSQL = expiresAt.UTC().Format("2006-01-02 15:04:05")
+	}
+
+	result, err := d.Exec(
+		`INSERT INTO personal_access_tokens (user_id, description, token_hash, token_prefix, expires_at) VALUES (?, ?, ?, ?, ?)`,
+		userID, description, tokenHash, prefix, expiresSQL,
+	)
+	if err != nil {
+		return "", nil, err
+	}
+	id, _ := result.LastInsertId()
+	pat := &models.PersonalAccessToken{
+		ID:          id,
+		UserID:      userID,
+		Description: description,
+		TokenPrefix: prefix,
+		ExpiresAt:   expiresAt,
+		CreatedAt:   time.Now(),
+	}
+	return raw, pat, nil
+}
+
+// ListUserPATs returns all PATs for a user (token hash never included).
+func (d *DB) ListUserPATs(userID int64) ([]models.PersonalAccessToken, error) {
+	rows, err := d.Query(`
+		SELECT id, user_id, description, token_prefix, expires_at, last_used_at, created_at
+		FROM personal_access_tokens
+		WHERE user_id = ?
+		ORDER BY created_at DESC
+	`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var pats []models.PersonalAccessToken
+	for rows.Next() {
+		var p models.PersonalAccessToken
+		var expiresAt, lastUsedAt sql.NullTime
+		if err := rows.Scan(&p.ID, &p.UserID, &p.Description, &p.TokenPrefix, &expiresAt, &lastUsedAt, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		if expiresAt.Valid {
+			p.ExpiresAt = &expiresAt.Time
+		}
+		if lastUsedAt.Valid {
+			p.LastUsedAt = &lastUsedAt.Time
+		}
+		pats = append(pats, p)
+	}
+	return pats, rows.Err()
+}
+
+// RevokePAT deletes a PAT owned by the given user.
+func (d *DB) RevokePAT(id, userID int64) error {
+	res, err := d.Exec(`DELETE FROM personal_access_tokens WHERE id = ? AND user_id = ?`, id, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("token not found")
+	}
+	return nil
+}
+
+// GetUserByPAT verifies a raw PAT (SHA-256 hash match) and returns the owning user.
+// It also updates last_used_at asynchronously.
+func (d *DB) GetUserByPAT(token string) (*models.User, error) {
+	sum := sha256.Sum256([]byte(token))
+	tokenHash := hex.EncodeToString(sum[:])
+
+	var u models.User
+	err := d.QueryRow(`
+		SELECT u.id, u.email, u.name, u.role, COALESCE(u.password_hash,''), u.disabled, u.created_at
+		FROM personal_access_tokens t
+		JOIN users u ON t.user_id = u.id
+		WHERE t.token_hash = ?
+		  AND (t.expires_at IS NULL OR t.expires_at > datetime('now'))
+		  AND u.disabled = 0
+	`, tokenHash).Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	u.IsLocal = u.PasswordHash != ""
+	go d.Exec(`UPDATE personal_access_tokens SET last_used_at = datetime('now') WHERE token_hash = ?`, tokenHash) //nolint
+	return &u, nil
+}
 
 // GetUserByEmail finds a user by email.
 func (d *DB) GetUserByEmail(email string) (*models.User, error) {

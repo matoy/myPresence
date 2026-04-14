@@ -3,6 +3,8 @@ package middleware
 import (
 	"context"
 	"net/http"
+	"strings"
+
 	"presence-app/internal/db"
 	"presence-app/internal/models"
 )
@@ -11,9 +13,33 @@ type contextKey string
 
 const userContextKey contextKey = "user"
 
-// Auth is an authentication middleware that checks for a valid session.
+// Auth is an authentication middleware that checks for a valid session or a Bearer PAT.
+// Set bearerEnabled=false to disable Personal Access Token authentication (API disabled mode).
 func Auth(database *db.DB, next http.Handler) http.Handler {
+	return AuthWithOptions(database, true, next)
+}
+
+// AuthWithOptions is Auth with explicit control over PAT Bearer token support.
+func AuthWithOptions(database *db.DB, bearerEnabled bool, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// --- Personal Access Token (Bearer) ---
+		if bearerEnabled {
+			if authHeader := r.Header.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
+				token := strings.TrimPrefix(authHeader, "Bearer ")
+				user, err := database.GetUserByPAT(token)
+				if err != nil {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusUnauthorized)
+					w.Write([]byte(`{"error":"token invalide ou expiré"}`))
+					return
+				}
+				ctx := context.WithValue(r.Context(), userContextKey, user)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+		}
+
+		// --- Session cookie ---
 		cookie, err := r.Cookie("session")
 		if err != nil {
 			http.Redirect(w, r, "/login", http.StatusSeeOther)

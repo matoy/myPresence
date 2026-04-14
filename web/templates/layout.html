@@ -104,6 +104,9 @@
                         {{if .User.HasRole "global"}}
                         <span class="bg-accent text-white text-xs px-2 py-0.5 rounded-full">Global</span>
                         {{end}}
+                        {{if not .DisableAPI}}
+                        <a href="/settings/tokens" class="text-white/60 hover:text-white text-sm transition" title="Tokens API">🔑</a>
+                        {{end}}
                         <a href="/logout" class="text-white/60 hover:text-white text-sm transition">Sign out</a>
                     </div>
                 </div>
@@ -149,6 +152,9 @@
                 {{end}}
                 <div class="border-t border-white/20 pt-2 mt-2">
                     <span class="block text-white/60 text-sm px-3">{{.User.Name}}</span>
+                    {{if not .DisableAPI}}
+                    <a href="/settings/tokens" class="block text-white/60 hover:text-white px-3 py-2 text-sm">🔑 Tokens API</a>
+                    {{end}}
                     <a href="/logout" class="block text-white/60 hover:text-white px-3 py-2 text-sm">Déconnexion</a>
                 </div>
             </div>

@@ -203,6 +203,17 @@ type SeatReservation struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// PersonalAccessToken represents a user-generated API token.
+type PersonalAccessToken struct {
+	ID          int64      `json:"id"`
+	UserID      int64      `json:"user_id"`
+	Description string     `json:"description"`
+	TokenPrefix string     `json:"token_prefix"` // first chars of the raw token, for display only
+	ExpiresAt   *time.Time `json:"expires_at"`   // nil = never expires
+	LastUsedAt  *time.Time `json:"last_used_at"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
 // PageData is the common data passed to all templates.
 type PageData struct {
 	Config      interface{}
@@ -214,4 +225,5 @@ type PageData struct {
 	HideFooter        bool
 	AppVersion        string
 	DisableFloorplans bool
+	DisableAPI        bool
 }

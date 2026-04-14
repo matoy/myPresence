@@ -25,6 +25,9 @@ var templateFS embed.FS
 //go:embed web/static
 var staticFS embed.FS
 
+//go:embed API.md
+var apiDocContent []byte
+
 func main() {
 	cfg := config.Load()
 
@@ -129,7 +132,7 @@ func main() {
 	}
 
 	templates := make(map[string]*template.Template)
-	pages := []string{"login", "calendar", "admin_teams", "admin_statuses", "admin_activity", "admin_holidays", "admin_users", "admin_user_logs", "floorplan", "admin_floorplans"}
+	pages := []string{"login", "calendar", "admin_teams", "admin_statuses", "admin_activity", "admin_holidays", "admin_users", "admin_user_logs", "floorplan", "admin_floorplans", "pat"}
 	for _, page := range pages {
 		t, err := template.New("").Funcs(funcMap).ParseFS(
 			templateFS,
@@ -174,6 +177,7 @@ func main() {
 		HideFooter:        cfg.HideFooter,
 		AppVersion:        config.Version,
 		DisableFloorplans: cfg.DisableFloorplans,
+		DisableAPI:        cfg.DisableAPI,
 		}
 		_ = logoExists
 		// Add logo flag to config map
@@ -202,6 +206,10 @@ func main() {
 	holidaysHandler := &handlers.HolidaysHandler{DB: database, Render: renderPage}
 	usersAdminHandler := &handlers.UsersAdminHandler{DB: database, Render: renderPage}
 	floorplanHandler := &handlers.FloorplanHandler{DB: database, DataDir: cfg.DataDir, Render: renderPage}
+	var patHandler *handlers.PATHandler
+	if !cfg.DisableAPI {
+		patHandler = &handlers.PATHandler{DB: database, Render: renderPage}
+	}
 
 	// Initialize SAML if configured
 	if cfg.SAMLEnabled {
@@ -253,6 +261,15 @@ func main() {
 	// Health check (public, no auth)
 	mux.HandleFunc("GET /health", healthHandler.Health)
 
+	// API documentation (public, disabled when DISABLE_API=true)
+	if !cfg.DisableAPI {
+		mux.HandleFunc("GET /api/docs", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.Header().Set("Cache-Control", "public, max-age=3600")
+			w.Write(apiDocContent)
+		})
+	}
+
 	// Auth routes (public)
 	mux.Handle("GET /login", middleware.OptionalAuth(database, http.HandlerFunc(authHandler.LoginPage)))
 	mux.HandleFunc("POST /login", authHandler.LocalLogin)
@@ -274,6 +291,14 @@ func main() {
 	authMux.HandleFunc("POST /api/presences", calHandler.SetPresences)
 	authMux.HandleFunc("POST /api/presences/clear", calHandler.ClearPresences)
 	authMux.HandleFunc("GET /api/presences", calHandler.GetPresencesAPI)
+
+	// Personal Access Token management
+	if !cfg.DisableAPI {
+		authMux.HandleFunc("GET /settings/tokens", patHandler.PATPage)
+		authMux.HandleFunc("GET /api/tokens", patHandler.ListPATs)
+		authMux.HandleFunc("POST /api/tokens", patHandler.CreatePAT)
+		authMux.HandleFunc("DELETE /api/tokens/{id}", patHandler.RevokePAT)
+	}
 
 	// Floorplan user routes
 	if !cfg.DisableFloorplans {
@@ -357,7 +382,7 @@ func main() {
 		mux.Handle("/admin/seats/", middleware.Auth(database, middleware.RequireRole(models.RoleFloorplanManager)(fpAdminMux)))
 		mux.Handle("/api/admin/", middleware.Auth(database, middleware.RequireRole(models.RoleFloorplanManager)(fpAdminMux)))
 	}
-	mux.Handle("/", middleware.Auth(database, authMux))
+	mux.Handle("/", middleware.AuthWithOptions(database, !cfg.DisableAPI, authMux))
 
 	// Start server
 	addr := ":" + cfg.Port

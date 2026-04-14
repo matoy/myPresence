@@ -16,6 +16,7 @@ A web application for managing employee presence and absences, built with Go and
 
 - **Personal monthly calendar**: each user enters their own presence/absences using click or drag-to-select; right-click a day to declare a half-day (AM or PM) with a different status per half
 - **Floor plans & desk reservations**: upload a floor map image, place clickable seats on it, and let users book desks directly from the calendar or the floor plan page
+- **REST API with Personal Access Tokens**: every feature is accessible via authenticated HTTP requests; users generate tokens with a chosen description and expiry; tokens carry no more permissions than the issuing user
 - **Team management**: assign users to teams
 - **Activity Report**: summary of billable days per team
 - **Customizable statuses**: color, label, billable flag (€)
@@ -125,6 +126,7 @@ Roles are assigned from **👤 Users & Roles** (`/admin/users`), accessible to t
 |-----|---------------|-------------|
 | `/` | Any logged-in user | Personal monthly calendar |
 | `/floorplan` | Any logged-in user | Floor plan viewer and desk reservation |
+| `/settings/tokens` | Any logged-in user | Manage Personal Access Tokens (API keys) |
 | `/admin/teams` | `team_manager` or `team_leader` | Manage teams and members |
 | `/admin/statuses` | `status_manager` | Manage presence statuses |
 | `/admin/activity` | `activity_viewer` or `team_leader` | Activity report by team and period |
@@ -133,6 +135,56 @@ Roles are assigned from **👤 Users & Roles** (`/admin/users`), accessible to t
 | `/admin/users` | `global` | Manage users, roles and passwords |
 | `/admin/users/{id}/logs` | `global` | Presence audit log for a user |
 | `/health` | *(none)* | Health check — public, no authentication |
+| `/api/docs` | *(none)* | Full REST API documentation (plain text, public) |
+
+### Features
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DISABLE_FLOORPLANS` | `false` | Set to `true` to disable the floor plan module (page, seat reservation, admin) |
+| `DISABLE_API` | `false` | Set to `true` to disable the REST API entirely (PAT management, Bearer auth, `/api/docs`) |
+
+---
+
+## REST API
+
+myPresence exposes a full REST API that mirrors every user action available in the browser interface. All endpoints require authentication using a **Personal Access Token (PAT)**.
+
+### Personal Access Tokens
+
+Each user can generate tokens at **🔑 `/settings/tokens`** (accessible from the top-right menu).
+
+- Choose a **description** (e.g. *"Script de reporting"*) and an **expiry** (7, 30, 90, 365 days, or no expiry)
+- The raw token (prefixed `mpa_`) is shown **once** — copy it before closing the dialog
+- Tokens inherit **exactly** the permissions of the issuing user — no elevation, no restriction
+- Revocation is immediate; all integrations using the token stop working instantly
+
+### Authentication header
+
+```
+Authorization: Bearer mpa_<your-token>
+```
+
+### API documentation
+
+The full endpoint reference (request/response format for every route) is available at:
+
+- **In-app**: [`/api/docs`](http://localhost:8080/api/docs) — served as plain text, no authentication required
+- **In the repository**: [`API.md`](API.md)
+
+### Example
+
+```bash
+# Get your presences for April 2026
+curl -H "Authorization: Bearer mpa_yourtoken" \
+     "http://localhost:8080/api/presences?team_id=1&year=2026&month=4"
+
+# Set a presence
+curl -X POST -H "Authorization: Bearer mpa_yourtoken" \
+     -H "Content-Type: application/json" \
+     -d '{"user_id":5,"dates":["2026-04-14"],"status_id":3,"half":"full"}' \
+     http://localhost:8080/api/presences
+```
 
 ---
 
@@ -246,6 +298,7 @@ myPresence/
 | `floorplans` | Floor map definitions (name, image path, sort order) |
 | `seats` | Seats placed on a floorplan (label, x/y position as percentage of image) |
 | `seat_reservations` | Seat bookings (seat_id, user_id, date, half — unique per seat+date+half) |
+| `personal_access_tokens` | API tokens (description, SHA-256 hash, prefix, expiry, last-used timestamp, user_id) |
 
 ---
 
