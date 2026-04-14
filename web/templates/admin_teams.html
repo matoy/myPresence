@@ -4,19 +4,19 @@
 {{$canManageTeams := .CanManageTeams}}
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8" x-data="teamsAdmin()">
     <div class="flex items-center justify-between mb-6">
-        <h1 class="text-2xl font-bold text-gray-900">👥 Teams</h1>
+        <h1 class="text-2xl font-bold text-gray-900">{{index $.T "teams.title"}}</h1>
     </div>
 
     <!-- Create Team Form -->
     {{if $canManageTeams}}
     <div class="bg-white rounded-xl shadow-md p-6 mb-6">
-        <h2 class="text-lg font-semibold text-gray-800 mb-3">Create a team</h2>
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">{{index $.T "teams.create"}}</h2>
         <form method="POST" action="/admin/teams" class="flex gap-3">
-            <input type="text" name="name" placeholder="Team name" required
+            <input type="text" name="name" placeholder="{{index $.T "teams.team_name"}}" required
                    class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary">
             <button type="submit"
                     class="px-6 py-2 bg-primary text-white rounded-lg font-medium hover:opacity-90 transition">
-                Create
+                {{index $.T "admin.create"}}
             </button>
         </form>
     </div>
@@ -58,7 +58,7 @@
                 </button>
                 {{end}}
                 {{if $canManageTeams}}
-                <button @click="if(confirm('Delete this team?')) deleteTeam({{.Team.ID}})"
+                <button @click="if(confirm(_t['teams.delete_confirm'])) deleteTeam({{.Team.ID}})"
                         class="p-2 text-red-400 hover:text-red-600 transition" title="Delete">
                     <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
@@ -87,7 +87,7 @@
                     </button>
                 </template>
                 <div x-show="allUsersForTeams.filter(u => memberSearch === '' || u.name.toLowerCase().includes(memberSearch.toLowerCase()) || u.email.toLowerCase().includes(memberSearch.toLowerCase())).length === 0"
-                     class="px-3 py-3 text-sm text-gray-400 text-center">No users found</div>
+                     class="px-3 py-3 text-sm text-gray-400 text-center" x-text="_t['teams.no_users']"></div>
             </div>
         </div>
         {{end}}
@@ -118,7 +118,7 @@
             </div>
             {{end}}
             {{else}}
-            <p class="text-sm text-gray-400 italic py-2">No members in this team</p>
+            <p class="text-sm text-gray-400 italic py-2" x-text="_t['teams.no_members']"></p>
             {{end}}
         </div>
     </div>
@@ -126,7 +126,7 @@
 
     {{if not .Teams}}
     <div class="bg-gray-50 rounded-xl p-8 text-center">
-        <p class="text-gray-500">No teams yet. Create one using the form above.</p>
+        <p class="text-gray-500">{{index $.T "teams.no_teams"}}</p>
     </div>
     {{end}}
 </div>

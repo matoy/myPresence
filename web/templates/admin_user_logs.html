@@ -9,7 +9,7 @@
             </svg>
         </a>
         <div>
-            <h1 class="text-2xl font-bold text-gray-900">📋 Journaux</h1>
+            <h1 class="text-2xl font-bold text-gray-900">{{index $.T "logs.title"}}</h1>
             <p class="text-sm text-gray-500 mt-0.5">{{.TargetUser.Name}} &mdash; {{.TargetUser.Email}}</p>
         </div>
     </div>
@@ -19,22 +19,22 @@
     {{$days := .Days}}
     {{$base := .FilterBaseURL}}
     <div class="flex items-center gap-2">
-        <span class="text-sm text-gray-500 whitespace-nowrap">Période :</span>
+        <span class="text-sm text-gray-500 whitespace-nowrap">{{index $.T "logs.period"}}</span>
         <a href="{{$base}}?days=7"
            class="px-3 py-1.5 text-sm rounded-lg border transition {{if eq $days 7}}bg-blue-600 text-white border-blue-600 font-semibold{{else}}bg-white text-gray-600 border-gray-200 hover:bg-gray-50{{end}}">
-            7 jours
+            {{index $.T "logs.7d"}}
         </a>
         <a href="{{$base}}?days=30"
            class="px-3 py-1.5 text-sm rounded-lg border transition {{if eq $days 30}}bg-blue-600 text-white border-blue-600 font-semibold{{else}}bg-white text-gray-600 border-gray-200 hover:bg-gray-50{{end}}">
-            30 jours
+            {{index $.T "logs.30d"}}
         </a>
         <a href="{{$base}}?days=90"
            class="px-3 py-1.5 text-sm rounded-lg border transition {{if eq $days 90}}bg-blue-600 text-white border-blue-600 font-semibold{{else}}bg-white text-gray-600 border-gray-200 hover:bg-gray-50{{end}}">
-            90 jours
+            {{index $.T "logs.90d"}}
         </a>
         <a href="{{$base}}?days=0"
            class="px-3 py-1.5 text-sm rounded-lg border transition {{if eq $days 0}}bg-blue-600 text-white border-blue-600 font-semibold{{else}}bg-white text-gray-600 border-gray-200 hover:bg-gray-50{{end}}">
-            Tout
+            {{index $.T "logs.all"}}
         </a>
     </div>
 
@@ -42,35 +42,35 @@
     {{if not .HideAdminSection}}
     <section x-data="{ filterObjet: '', filterAction: '' }">
         <div class="flex items-center justify-between mb-3">
-            <h2 class="text-lg font-semibold text-gray-800">Actions d'administration</h2>
-            <span class="text-sm text-gray-400">{{len .AdminLogs}} entrée(s)</span>
+            <h2 class="text-lg font-semibold text-gray-800">{{index $.T "logs.admin_section"}}</h2>
+            <span class="text-sm text-gray-400">{{len .AdminLogs}} {{index $.T "logs.entries"}}</span>
         </div>
 
         {{if .AdminLogs}}
         <div class="flex flex-wrap gap-3 mb-4">
             <div class="flex items-center gap-2">
-                <label class="text-sm text-gray-500 whitespace-nowrap">Objet :</label>
+                <label class="text-sm text-gray-500 whitespace-nowrap">{{index $.T "logs.filter_subject"}}</label>
                 <select x-model="filterObjet" class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300">
-                    <option value="">Tous</option>
-                    <option value="team">👥 Équipe</option>
-                    <option value="status">🏷️ Statut</option>
-                    <option value="holiday">🎌 Jour férié</option>
-                    <option value="user">👤 Utilisateur</option>
+                    <option value="">{{index $.T "logs.filter_all"}}</option>
+                    <option value="team">{{index $.T "logs.entity_team"}}</option>
+                    <option value="status">{{index $.T "logs.entity_status"}}</option>
+                    <option value="holiday">{{index $.T "logs.entity_holiday"}}</option>
+                    <option value="user">{{index $.T "logs.entity_user"}}</option>
                 </select>
             </div>
             <div class="flex items-center gap-2">
-                <label class="text-sm text-gray-500 whitespace-nowrap">Action :</label>
+                <label class="text-sm text-gray-500 whitespace-nowrap">{{index $.T "logs.filter_action"}}</label>
                 <select x-model="filterAction" class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300">
-                    <option value="">Toutes</option>
-                    <option value="create">Créé</option>
-                    <option value="update">Modifié</option>
-                    <option value="delete">Supprimé</option>
-                    <option value="add_member">Membre ajouté</option>
-                    <option value="remove_member">Membre retiré</option>
-                    <option value="update_roles">Rôles modifiés</option>
-                    <option value="set_password">Mot de passe</option>
-                    <option value="set_disabled">Désactivé</option>
-                    <option value="set_enabled">Activé</option>
+                    <option value="">{{index $.T "logs.filter_all_actions"}}</option>
+                    <option value="create">{{index $.T "logs.action_create"}}</option>
+                    <option value="update">{{index $.T "logs.action_update"}}</option>
+                    <option value="delete">{{index $.T "logs.action_delete"}}</option>
+                    <option value="add_member">{{index $.T "logs.action_add_member"}}</option>
+                    <option value="remove_member">{{index $.T "logs.action_remove_member"}}</option>
+                    <option value="update_roles">{{index $.T "logs.action_update_roles"}}</option>
+                    <option value="set_password">{{index $.T "logs.action_set_password"}}</option>
+                    <option value="set_disabled">{{index $.T "logs.action_set_disabled"}}</option>
+                    <option value="set_enabled">{{index $.T "logs.action_set_enabled"}}</option>
                 </select>
             </div>
         </div>
@@ -78,10 +78,10 @@
             <table class="w-full border-collapse">
                 <thead>
                     <tr class="bg-gray-50 border-b border-gray-200">
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Objet</th>
-                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Action</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Détail</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{{index $.T "logs.date"}}</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{{index $.T "logs.subject"}}</th>
+                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">{{index $.T "logs.action"}}</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{{index $.T "logs.detail"}}</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
@@ -94,31 +94,31 @@
                             {{.CreatedAt.Format "02/01/2006 15:04"}}
                         </td>
                         <td class="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
-                            {{if eq .EntityType "team"}}👥 Équipe
-                            {{else if eq .EntityType "status"}}🏷️ Statut
-                            {{else if eq .EntityType "holiday"}}🎌 Jour férié
-                            {{else if eq .EntityType "user"}}👤 Utilisateur
+                            {{if eq .EntityType "team"}}{{index $.T "logs.entity_team"}}
+                            {{else if eq .EntityType "status"}}{{index $.T "logs.entity_status"}}
+                            {{else if eq .EntityType "holiday"}}{{index $.T "logs.entity_holiday"}}
+                            {{else if eq .EntityType "user"}}{{index $.T "logs.entity_user"}}
                             {{else}}{{.EntityType}}{{end}}
                         </td>
                         <td class="px-4 py-3 text-center whitespace-nowrap">
                             {{if eq .Action "create"}}
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Créé</span>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">{{index $.T "logs.action_create"}}</span>
                             {{else if eq .Action "update"}}
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">Modifié</span>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">{{index $.T "logs.action_update"}}</span>
                             {{else if eq .Action "delete"}}
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Supprimé</span>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">{{index $.T "logs.action_delete"}}</span>
                             {{else if eq .Action "add_member"}}
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Membre ajouté</span>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">{{index $.T "logs.action_add_member"}}</span>
                             {{else if eq .Action "remove_member"}}
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">Membre retiré</span>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">{{index $.T "logs.action_remove_member"}}</span>
                             {{else if eq .Action "update_roles"}}
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">Rôles modifiés</span>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">{{index $.T "logs.action_update_roles"}}</span>
                             {{else if eq .Action "set_password"}}
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Mot de passe</span>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">{{index $.T "logs.action_set_password"}}</span>
                             {{else if eq .Action "set_disabled"}}
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">Désactivé</span>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">{{index $.T "logs.action_set_disabled"}}</span>
                             {{else if eq .Action "set_enabled"}}
-                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">Activé</span>
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">{{index $.T "logs.action_set_enabled"}}</span>
                             {{else}}
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">{{.Action}}</span>
                             {{end}}
@@ -142,7 +142,7 @@
         </div>
         {{else}}
         <div class="bg-white rounded-xl shadow-md p-10 text-center">
-            <p class="text-gray-400">Aucune action d'administration enregistrée.</p>
+            <p class="text-gray-400">{{index $.T "logs.no_admin"}}</p>
         </div>
         {{end}}
     </section>
@@ -151,13 +151,13 @@
     {{/* ── Section 2 : Déclarations de présence ── */}}
     <section x-data="{ filterStatus: '' }">
         <div class="flex items-center justify-between mb-3">
-            <h2 class="text-lg font-semibold text-gray-800">Déclarations de présence</h2>
-            <span class="text-sm text-gray-400">{{len .Logs}} entrée(s)</span>
+            <h2 class="text-lg font-semibold text-gray-800">{{index $.T "logs.presence_section"}}</h2>
+            <span class="text-sm text-gray-400">{{len .Logs}} {{index $.T "logs.entries"}}</span>
         </div>
 
         {{if .Logs}}
         <div class="flex items-center gap-2 mb-4">
-            <label class="text-sm text-gray-500 whitespace-nowrap">Statut :</label>
+            <label class="text-sm text-gray-500 whitespace-nowrap">{{index $.T "logs.status"}}</label>
             <select x-model="filterStatus" class="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300">
                 <option value="">Tous</option>
                 {{range .Statuses}}
@@ -169,11 +169,11 @@
             <table class="w-full border-collapse">
                 <thead>
                     <tr class="bg-gray-50 border-b border-gray-200">
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Date de l'action</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Par</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Jour déclaré</th>
-                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Action</th>
-                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Statut</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{{index $.T "logs.date"}}</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{{index $.T "logs.modified_by"}}</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{{index $.T "logs.declared_day"}}</th>
+                        <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">{{index $.T "logs.action"}}</th>
+                        <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{{index $.T "logs.status"}}</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
@@ -193,11 +193,11 @@
                         <td class="px-4 py-3 text-center">
                             {{if eq .Action "set"}}
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                Déclaré
+                                {{index $.T "logs.action_set"}}
                             </span>
                             {{else}}
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                                Effacé
+                                {{index $.T "logs.action_clear"}}
                             </span>
                             {{end}}
                         </td>
@@ -218,7 +218,7 @@
         </div>
         {{else}}
         <div class="bg-white rounded-xl shadow-md p-10 text-center">
-            <p class="text-gray-400">Aucune déclaration enregistrée.</p>
+            <p class="text-gray-400">{{index $.T "logs.no_presence"}}</p>
         </div>
         {{end}}
     </section>

@@ -3,7 +3,7 @@
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8" x-data="floorplanApp({{json .Seats}}, {{json .Date}}, {{json .Half}}, {{if .CurrentFP}}{{.CurrentFP.ID}}{{else}}0{{end}})">
 
     <div class="flex items-center justify-between mb-4">
-        <h1 class="text-2xl font-bold text-gray-900">🗺️ Plans d'étages</h1>
+        <h1 class="text-2xl font-bold text-gray-900">{{index $.T "fp.title"}}</h1>
     </div>
 
     <!-- Filters bar -->
@@ -11,7 +11,7 @@
 
         <!-- Date picker -->
         <div class="flex items-center gap-1">
-            <label class="text-sm font-medium text-gray-500">Date</label>
+            <label class="text-sm font-medium text-gray-500">{{index $.T "admin.date"}}</label>
             <button @click="prevDay()"
                     class="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 transition text-gray-600 flex items-center justify-center"
                     title="Jour précédent">
@@ -34,19 +34,19 @@
         <div class="flex items-center gap-1 rounded-lg overflow-hidden border border-gray-200">
             <button @click="half='AM'; reload()"
                     :class="half==='AM' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
-                    class="px-3 py-2 text-sm font-medium transition">Matin</button>
+                    class="px-3 py-2 text-sm font-medium transition">{{index $.T "fp.morning"}}</button>
             <button @click="half='full'; reload()"
                     :class="half==='full' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
-                    class="px-3 py-2 text-sm font-medium transition border-x border-gray-200">Journée</button>
+                    class="px-3 py-2 text-sm font-medium transition border-x border-gray-200">{{index $.T "fp.full_day"}}</button>
             <button @click="half='PM'; reload()"
                     :class="half==='PM' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50'"
-                    class="px-3 py-2 text-sm font-medium transition">Après-midi</button>
+                    class="px-3 py-2 text-sm font-medium transition">{{index $.T "fp.afternoon"}}</button>
         </div>
 
         <!-- Floorplan selector -->
         {{if gt (len .Floorplans) 1}}
         <div class="flex items-center gap-2">
-            <label class="text-sm font-medium text-gray-500">Étage</label>
+            <label class="text-sm font-medium text-gray-500">{{index $.T "fp.floor"}}</label>
             <select @change="fpID = parseInt($event.target.value); reload()"
                     class="px-3 py-2 border border-gray-300 rounded-lg text-sm">
                 {{range .Floorplans}}
@@ -58,9 +58,9 @@
 
         <!-- Legend -->
         <div class="flex items-center gap-3 ml-auto text-xs text-gray-500">
-            <span class="flex items-center gap-1.5"><span class="h-3 w-3 rounded-full bg-green-500 inline-block"></span>Libre</span>
-            <span class="flex items-center gap-1.5"><span class="h-3 w-3 rounded-full bg-blue-500 inline-block"></span>Ma réservation</span>
-            <span class="flex items-center gap-1.5"><span class="h-3 w-3 rounded-full bg-red-400 inline-block"></span>Occupé</span>
+            <span class="flex items-center gap-1.5"><span class="h-3 w-3 rounded-full bg-green-500 inline-block"></span>{{index $.T "fp.free"}}</span>
+            <span class="flex items-center gap-1.5"><span class="h-3 w-3 rounded-full bg-blue-500 inline-block"></span>{{index $.T "fp.mine"}}</span>
+            <span class="flex items-center gap-1.5"><span class="h-3 w-3 rounded-full bg-red-400 inline-block"></span>{{index $.T "fp.taken"}}</span>
         </div>
     </div>
 
@@ -68,7 +68,7 @@
     {{if and .CurrentFP (not .IsOnSite)}}
     <div class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4 text-amber-800 text-sm flex items-center gap-2">
         <span class="text-lg">⚠️</span>
-        <span>Vous devez être déclaré <strong>sur site</strong> pour la date sélectionnée pour réserver un siège. Le plan est affiché en lecture seule.</span>
+        <span>{{index $.T "fp.warning"}}</span>
     </div>
     {{end}}
 
@@ -76,8 +76,8 @@
     {{if not .Floorplans}}
     <div class="bg-white rounded-xl shadow-md p-12 text-center text-gray-400">
         <p class="text-2xl mb-2">🗺️</p>
-        <p class="text-lg font-medium">Aucun plan d'étage disponible</p>
-        <p class="text-sm mt-1">Contactez un administrateur pour configurer les plans.</p>
+        <p class="text-lg font-medium">{{index $.T "fp.no_plans"}}</p>
+        <p class="text-sm mt-1">{{index $.T "fp.no_plans_hint"}}</p>
     </div>
     {{else if .CurrentFP}}
 
@@ -86,8 +86,7 @@
         <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <h2 class="font-semibold text-gray-800">{{.CurrentFP.Name}}</h2>
             <span class="text-sm text-gray-400">
-                <span x-text="seats.filter(s=>s.status==='free').length"></span> libre(s) ·
-                <span x-text="seats.filter(s=>s.status==='taken').length"></span> occupé(s)
+                <span x-text="seats.filter(s=>s.status==='free').length + ' {{index $.T "fp.free_s"}} \u00b7 ' + seats.filter(s=>s.status==='taken').length + ' {{index $.T "fp.taken_s"}}'"></span>
             </span>
         </div>
 
@@ -105,7 +104,7 @@
                 <template x-for="seat in seats" :key="seat.id">
                     <button
                         @click="clickSeat(seat)"
-                        :title="seat.label + (seat.status === 'taken' ? ' · Occupé' : seat.status === 'mine' ? ' · Ma réservation (cliquer pour annuler)' : ' · Libre — cliquer pour réserver')"
+                        :title="seat.label + (seat.status === 'taken' ? ' \u00b7 ' + _t['fp.taken'] : seat.status === 'mine' ? ' \u00b7 ' + _t['fp.mine'] : ' \u00b7 ' + _t['fp.free'])"
                         :class="{
                             'bg-green-500 hover:bg-green-600 text-white shadow-green-200': seat.status === 'free',
                             'bg-blue-500 hover:bg-blue-600 text-white shadow-blue-200 ring-2 ring-blue-300': seat.status === 'mine',
@@ -120,7 +119,7 @@
         </div>
         {{else}}
         <div class="p-12 text-center text-gray-400">
-            <p>Aucune image pour ce plan.</p>
+            <p>{{index $.T "fp.no_image"}}</p>
         </div>
         {{end}}
     </div>
@@ -136,12 +135,12 @@
             <div class="flex gap-3 justify-end">
                 <button @click="confirm.show = false"
                         class="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm font-medium hover:bg-gray-200 transition">
-                    Annuler
+                    {{index $.T "fp.cancel"}}
                 </button>
                 <button @click="confirm.action(); confirm.show = false"
                         :class="confirm.danger ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-primary hover:opacity-90 text-white'"
                         class="px-4 py-2 rounded-lg text-sm font-medium transition">
-                    Confirmer
+                    {{index $.T "fp.confirm"}}
                 </button>
             </div>
         </div>
@@ -208,29 +207,29 @@ function floorplanApp(initialSeats, initialDate, initialHalf, initialFpID) {
                 // Cancel reservation
                 this.confirm = {
                     show: true,
-                    title: 'Annuler la réservation',
-                    message: `Annuler votre réservation pour le siège "${seat.label}" ?`,
+                    title: _t['fp.cancel_title'],
+                    message: `${_t['fp.cancel_confirm']} "${seat.label}" ?`,
                     danger: true,
                     action: async () => {
                         try {
                             const resp = await fetch(`/api/reservations/${seat.reservation_id}`, { method: 'DELETE' });
                             if (resp.ok) {
-                                this.showToast('Réservation annulée');
+                                this.showToast(_t['fp.cancelled']);
                                 this.reload();
                             } else {
                                 const d = await resp.json();
-                                this.showToast(d.error || 'Erreur', true);
+                                this.showToast(d.error || _t['fp.error'], true);
                             }
-                        } catch { this.showToast('Erreur de connexion', true); }
+                        } catch { this.showToast(_t['fp.conn_error'], true); }
                     }
                 };
             } else {
                 // Reserve seat
-                const halfLabel = this.half === 'full' ? 'journée entière' : this.half === 'AM' ? 'matin' : 'après-midi';
+                const halfLabel = this.half === 'full' ? _t['fp.half_full'] : this.half === 'AM' ? _t['fp.half_am'] : _t['fp.half_pm'];
                 this.confirm = {
                     show: true,
-                    title: 'Réserver ce siège',
-                    message: `Réserver le siège "${seat.label}" pour le ${this.date} (${halfLabel}) ?`,
+                    title: _t['fp.reserve_title'],
+                    message: `${_t['fp.reserve_for']} "${seat.label}" — ${this.date} (${halfLabel}) ?`,
                     danger: false,
                     action: async () => {
                         try {
@@ -240,13 +239,13 @@ function floorplanApp(initialSeats, initialDate, initialHalf, initialFpID) {
                                 body: JSON.stringify({ seat_id: seat.id, date: this.date, half: this.half })
                             });
                             if (resp.ok) {
-                                this.showToast('Siège réservé !');
+                                this.showToast(_t['fp.reserved']);
                                 this.reload();
                             } else {
                                 const d = await resp.json();
-                                this.showToast(d.error || 'Erreur', true);
+                                this.showToast(d.error || _t['fp.error'], true);
                             }
-                        } catch { this.showToast('Erreur de connexion', true); }
+                        } catch { this.showToast(_t['fp.conn_error'], true); }
                     }
                 };
             }

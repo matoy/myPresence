@@ -39,6 +39,9 @@ type Config struct {
 	SAMLCertFile       string
 	SAMLKeyFile        string
 
+	// Internationalisation
+	DefaultLang string
+
 	// Features
 	DisableFloorplans bool
 	DisableAPI        bool
@@ -71,6 +74,8 @@ func Load() *Config {
 		SAMLRootURL:        getEnv("SAML_ROOT_URL", ""),
 		SAMLCertFile:       getEnv("SAML_SP_CERT_FILE", ""),
 		SAMLKeyFile:        getEnv("SAML_SP_KEY_FILE", ""),
+
+		DefaultLang: getEnv("DEFAULT_LANG", "en"),
 
 		DisableFloorplans: getEnvBool("DISABLE_FLOORPLANS", false),
 		DisableAPI:        getEnvBool("DISABLE_API", false),

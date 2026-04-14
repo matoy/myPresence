@@ -1,6 +1,6 @@
 {{define "layout"}}
 <!DOCTYPE html>
-<html lang="fr" class="h-full">
+<html lang="{{.Lang}}" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -30,6 +30,7 @@
             }
         }
     </script>
+    <script>const _t = {{json .T}};</script>
 </head>
 <body class="h-full bg-gray-50 font-sans">
     {{if .User}}
@@ -54,49 +55,49 @@
                 <!-- Desktop nav links -->
                 <div class="hidden md:flex items-center space-x-4">
                     <a href="/" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "calendar"}}bg-white/20 text-white{{end}}">
-                        📅 Calendar
+                        {{index .T "nav.calendar"}}
                     </a>
                     {{if not .DisableFloorplans}}
                     <a href="/floorplan" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "floorplan"}}bg-white/20 text-white{{end}}">
-                        🗺️ Plans
+                        {{index .T "nav.floorplans"}}
                     </a>
                     {{end}}
                     {{if .User.HasRole "team_manager"}}
                     <a href="/admin/teams" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_teams"}}bg-white/20 text-white{{end}}">
-                        👥 Teams
+                        {{index .T "nav.teams"}}
                     </a>
                     {{else if .User.HasRole "team_leader"}}
                     <a href="/admin/teams" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_teams"}}bg-white/20 text-white{{end}}">
-                        👥 Teams
+                        {{index .T "nav.teams"}}
                     </a>
                     {{end}}
                     {{if .User.HasRole "activity_viewer"}}
                     <a href="/admin/activity" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_activity"}}bg-white/20 text-white{{end}}">
-                        📋 Activity Report
+                        {{index .T "nav.activity"}}
                     </a>
                     {{else if .User.HasRole "team_leader"}}
                     <a href="/admin/activity" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_activity"}}bg-white/20 text-white{{end}}">
-                        📋 Activity Report
+                        {{index .T "nav.activity"}}
                     </a>
                     {{end}}
                     {{if .User.HasRole "status_manager"}}
                     <a href="/admin/statuses" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_statuses"}}bg-white/20 text-white{{end}}">
-                        🏷️ Statuses
+                        {{index .T "nav.statuses"}}
                     </a>
                     {{end}}
                     {{if .User.HasRole "global"}}
                     <a href="/admin/holidays" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_holidays"}}bg-white/20 text-white{{end}}">
-                        🎌 Holidays
+                        {{index .T "nav.holidays"}}
                     </a>
                     {{end}}
                     {{if and (not .DisableFloorplans) (.User.HasRole "floorplan_manager")}}
                     <a href="/admin/floorplans" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_floorplans"}}bg-white/20 text-white{{end}}">
-                        🗺️ Plans admin
+                        {{index .T "nav.floorplans_admin"}}
                     </a>
                     {{end}}
                     {{if .User.HasRole "global"}}
                     <a href="/admin/users" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_users"}}bg-white/20 text-white{{end}}">
-                        👤 Users &amp; Roles
+                        {{index .T "nav.users_roles"}}
                     </a>
                     {{end}}
                     <!-- User menu dropdown -->
@@ -120,27 +121,45 @@
                              x-transition:leave="transition ease-in duration-100"
                              x-transition:leave-start="opacity-100"
                              x-transition:leave-end="opacity-0"
-                             class="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 min-w-[210px] z-50">
+                             class="absolute right-0 top-full mt-2 bg-white rounded-xl shadow-xl border border-gray-100 py-1.5 min-w-[220px] z-50">
                             {{if .User.IsLocal}}
                             <a href="/settings/change-password"
                                class="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition">
-                                🔐 Changer le mot de passe
+                                {{index .T "nav.change_password"}}
                             </a>
                             {{end}}
                             <a href="/settings/my-logs"
                                class="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition">
-                                📋 Mes journaux
+                                {{index .T "nav.my_logs"}}
                             </a>
                             {{if and (not .DisableAPI) (.User.CanUseTokens)}}
                             <a href="/settings/tokens"
                                class="flex items-center gap-2.5 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition">
-                                🔑 Tokens API
+                                {{index .T "nav.api_tokens"}}
                             </a>
                             {{end}}
+                            <!-- Language switcher -->
+                            <div class="border-t border-gray-100 my-1"></div>
+                            <div class="px-4 py-1.5">
+                                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">{{index .T "nav.language"}}</p>
+                                <div class="flex gap-1 flex-wrap">
+                                    {{$currentLang := .Lang}}
+                                    {{range .SupportedLangs}}
+                                    <form method="POST" action="/set-lang" class="inline">
+                                        <input type="hidden" name="lang" value="{{.Code}}">
+                                        <button type="submit"
+                                                class="text-xs px-2 py-1 rounded-lg transition font-medium border {{if eq .Code $currentLang}}bg-primary text-white border-primary{{else}}bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200{{end}}"
+                                                title="{{.Label}}">
+                                            {{.Flag}} {{.Code | upper}}
+                                        </button>
+                                    </form>
+                                    {{end}}
+                                </div>
+                            </div>
                             <div class="border-t border-gray-100 my-1"></div>
                             <a href="/logout"
                                class="flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition">
-                                🚪 Déconnexion
+                                {{index .T "nav.logout"}}
                             </a>
                         </div>
                     </div>
@@ -159,38 +178,42 @@
         <!-- Mobile menu -->
         <div x-show="mobileMenu" x-transition class="md:hidden bg-primary/95 border-t border-white/10">
             <div class="px-4 py-3 space-y-2">
-                <a href="/" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">📅 Calendar</a>
+                <a href="/" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">{{index .T "nav.calendar"}}</a>
                 {{if not .DisableFloorplans}}
-                <a href="/floorplan" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">🗺️ Plans</a>
+                <a href="/floorplan" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">{{index .T "nav.floorplans"}}</a>
                 {{end}}
                 {{if .User.HasRole "team_manager"}}
-                <a href="/admin/teams" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">👥 Teams</a>
+                <a href="/admin/teams" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">{{index .T "nav.teams"}}</a>
                 {{else if .User.HasRole "team_leader"}}
-                <a href="/admin/teams" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">👥 Teams</a>
+                <a href="/admin/teams" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">{{index .T "nav.teams"}}</a>
                 {{end}}
                 {{if .User.HasRole "activity_viewer"}}
-                <a href="/admin/activity" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">📋 Activity Report</a>
+                <a href="/admin/activity" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">{{index .T "nav.activity"}}</a>
                 {{else if .User.HasRole "team_leader"}}
-                <a href="/admin/activity" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">📋 Activity Report</a>
+                <a href="/admin/activity" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">{{index .T "nav.activity"}}</a>
                 {{end}}
                 {{if .User.HasRole "status_manager"}}
-                <a href="/admin/statuses" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">🏷️ Statuses</a>
+                <a href="/admin/statuses" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">{{index .T "nav.statuses"}}</a>
                 {{end}}
                 {{if .User.HasRole "global"}}
-                <a href="/admin/holidays" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">🎌 Holidays</a>
+                <a href="/admin/holidays" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">{{index .T "nav.holidays"}}</a>
                 {{end}}
                 {{if and (not .DisableFloorplans) (.User.HasRole "floorplan_manager")}}
-                <a href="/admin/floorplans" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">🗺️ Plans admin</a>
+                <a href="/admin/floorplans" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">{{index .T "nav.floorplans_admin"}}</a>
                 {{end}}
                 {{if .User.HasRole "global"}}
-                <a href="/admin/users" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">👤 Users &amp; Roles</a>
+                <a href="/admin/users" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">{{index .T "nav.users_roles"}}</a>
                 {{end}}
                 <div class="border-t border-white/20 pt-2 mt-2">
                     <span class="block text-white/60 text-sm px-3">{{.User.Name}}</span>
-                    {{if and (not .DisableAPI) (.User.CanUseTokens)}}
-                    <a href="/settings/tokens" class="block text-white/60 hover:text-white px-3 py-2 text-sm">🔑 Tokens API</a>
+                    {{if .User.IsLocal}}
+                    <a href="/settings/change-password" class="block text-white/60 hover:text-white px-3 py-2 text-sm">{{index .T "nav.change_password"}}</a>
                     {{end}}
-                    <a href="/logout" class="block text-white/60 hover:text-white px-3 py-2 text-sm">Déconnexion</a>
+                    <a href="/settings/my-logs" class="block text-white/60 hover:text-white px-3 py-2 text-sm">{{index .T "nav.my_logs"}}</a>
+                    {{if and (not .DisableAPI) (.User.CanUseTokens)}}
+                    <a href="/settings/tokens" class="block text-white/60 hover:text-white px-3 py-2 text-sm">{{index .T "nav.api_tokens"}}</a>
+                    {{end}}
+                    <a href="/logout" class="block text-white/60 hover:text-white px-3 py-2 text-sm">{{index .T "nav.logout"}}</a>
                 </div>
             </div>
         </div>

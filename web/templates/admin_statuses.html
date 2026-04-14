@@ -2,41 +2,41 @@
 {{with .Data}}
 <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8" x-data="statusAdmin()">
     <div class="flex items-center justify-between mb-6">
-        <h1 class="text-2xl font-bold text-gray-900">🏷️ Statuses</h1>
+        <h1 class="text-2xl font-bold text-gray-900">{{index $.T "statuses.title"}}</h1>
     </div>
 
     <!-- Create Status Form -->
     <div class="bg-white rounded-xl shadow-md p-6 mb-6">
-        <h2 class="text-lg font-semibold text-gray-800 mb-3">Add a status</h2>
+        <h2 class="text-lg font-semibold text-gray-800 mb-3">{{index $.T "statuses.add"}}</h2>
         <form method="POST" action="/admin/statuses" class="flex flex-wrap gap-3 items-end">
             <div class="flex-1 min-w-[200px]">
-                <label class="block text-xs font-medium text-gray-500 mb-1">Name</label>
-                <input type="text" name="name" placeholder="e.g. Paid leave" required
+                <label class="block text-xs font-medium text-gray-500 mb-1">{{index $.T "admin.name"}}</label>
+                <input type="text" name="name" placeholder="{{index $.T "statuses.name_placeholder"}}" required
                        class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/50">
             </div>
             <div class="w-24">
-                <label class="block text-xs font-medium text-gray-500 mb-1">Color</label>
+                <label class="block text-xs font-medium text-gray-500 mb-1">{{index $.T "admin.color"}}</label>
                 <input type="color" name="color" value="#3b82f6"
                        class="w-full h-10 rounded-lg border border-gray-300 cursor-pointer">
             </div>
             <div class="w-20">
-                <label class="block text-xs font-medium text-gray-500 mb-1">Order</label>
+                <label class="block text-xs font-medium text-gray-500 mb-1">{{index $.T "admin.order"}}</label>
                 <input type="number" name="sort_order" value="0"
                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/50">
             </div>
             <div class="flex items-center gap-2 py-2">
                 <input type="checkbox" name="billable" id="billable"
                        class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary">
-                <label for="billable" class="text-sm font-medium text-gray-700">Billable</label>
+                <label for="billable" class="text-sm font-medium text-gray-700">{{index $.T "statuses.billable"}}</label>
             </div>
             <div class="flex items-center gap-2 py-2">
                 <input type="checkbox" name="on_site" id="on_site"
                        class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary">
-                <label for="on_site" class="text-sm font-medium text-gray-700">On site</label>
+                <label for="on_site" class="text-sm font-medium text-gray-700">{{index $.T "statuses.on_site"}}</label>
             </div>
             <button type="submit"
                     class="px-6 py-2 bg-primary text-white rounded-lg font-medium hover:opacity-90 transition">
-                Add
+                {{index $.T "admin.add"}}
             </button>
         </form>
     </div>
@@ -46,12 +46,12 @@
         <table class="w-full">
             <thead>
                 <tr class="bg-gray-50 border-b border-gray-200">
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Color</th>
-                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Name</th>
-                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Billable</th>
-                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">On site</th>
-                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Order</th>
-                    <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Actions</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{{index $.T "admin.color"}}</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">{{index $.T "admin.name"}}</th>
+                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">{{index $.T "statuses.billable"}}</th>
+                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">{{index $.T "statuses.on_site"}}</th>
+                    <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">{{index $.T "admin.order"}}</th>
+                    <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">{{index $.T "admin.actions"}}</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
@@ -94,7 +94,7 @@
                             <label class="inline-flex items-center gap-1 cursor-pointer">
                                 <input type="checkbox" x-model="editBillable"
                                        class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary">
-                                <span class="text-xs text-gray-600">Billable</span>
+                                <span class="text-xs text-gray-600" x-text="_t['statuses.billable']"></span>
                             </label>
                         </template>
                     </td>
@@ -116,7 +116,7 @@
                             <label class="inline-flex items-center gap-1 cursor-pointer">
                                 <input type="checkbox" x-model="editOnSite"
                                        class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary">
-                                <span class="text-xs text-gray-600">On site</span>
+                                <span class="text-xs text-gray-600" x-text="_t['statuses.on_site']"></span>
                             </label>
                         </template>
                     </td>
@@ -133,7 +133,7 @@
                         <div class="flex items-center justify-end gap-1">
                             <template x-if="!editing">
                                 <button @click="editing = true"
-                                        class="p-1.5 text-gray-400 hover:text-gray-600 transition" title="Modifier">
+                                    :title="_t['admin.edit']" class="p-1.5 text-gray-400 hover:text-gray-600 transition">
                                     <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
                                     </svg>
@@ -142,21 +142,21 @@
                             <template x-if="editing">
                                 <div class="flex gap-1">
                                     <button @click="updateStatus({{.ID}}, editName, editColor, editBillable, editOnSite, editOrder); editing = false"
-                                            class="p-1.5 text-green-500 hover:text-green-700 transition" title="Sauvegarder">
+                                            :title="_t['admin.save']" class="p-1.5 text-green-500 hover:text-green-700 transition">
                                         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
                                         </svg>
                                     </button>
                                     <button @click="editing = false; editName='{{.Name}}'; editColor='{{.Color}}'; editBillable={{.Billable}}; editOnSite={{.OnSite}}; editOrder={{.SortOrder}}"
-                                            class="p-1.5 text-gray-400 hover:text-gray-600 transition" title="Annuler">
+                                            :title="_t['admin.cancel']" class="p-1.5 text-gray-400 hover:text-gray-600 transition">
                                         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
                                         </svg>
                                     </button>
                                 </div>
                             </template>
-                            <button @click="if(confirm('Delete this status?')) deleteStatus({{.ID}})"
-                                    class="p-1.5 text-red-400 hover:text-red-600 transition" title="Supprimer">
+                            <button @click="if(confirm(_t['statuses.delete_confirm'])) deleteStatus({{.ID}})"
+                                    :title="_t['admin.delete']" class="p-1.5 text-red-400 hover:text-red-600 transition">
                                 <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
                                 </svg>
@@ -168,7 +168,7 @@
             </tbody>
         </table>
         {{if not .Statuses}}
-        <div class="p-8 text-center text-gray-400">Aucun statut configuré</div>
+        <div class="p-8 text-center text-gray-400">{{index $.T "statuses.none"}}</div>
         {{end}}
     </div>
 </div>

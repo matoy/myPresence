@@ -260,4 +260,8 @@ type PageData struct {
 	AppVersion        string
 	DisableFloorplans bool
 	DisableAPI        bool
+	// i18n
+	T              map[string]string // translation map for the active language
+	Lang           string            // active language code ("en", "fr", "de", "es")
+	SupportedLangs interface{}       // []i18n.LangInfo — passed from main.go to avoid import cycle
 }

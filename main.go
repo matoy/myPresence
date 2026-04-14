@@ -15,6 +15,7 @@ import (
 	"presence-app/internal/config"
 	"presence-app/internal/db"
 	"presence-app/internal/handlers"
+	"presence-app/internal/i18n"
 	"presence-app/internal/middleware"
 	"presence-app/internal/models"
 )
@@ -122,6 +123,7 @@ func main() {
 			return d
 		},
 		"intToInt64": func(i int) int64 { return int64(i) },
+		"upper": strings.ToUpper,
 		"percent": tmplPercent,
 		"hasRole": func(user *models.User, role string) bool {
 			if user == nil {
@@ -132,7 +134,7 @@ func main() {
 	}
 
 	templates := make(map[string]*template.Template)
-	pages := []string{"login", "calendar", "admin_teams", "admin_statuses", "admin_activity", "admin_holidays", "admin_users", "admin_user_new", "admin_user_logs", "floorplan", "admin_floorplans", "pat", "settings_change_password"}
+	pages := []string{"login", "calendar", "admin_teams", "admin_statuses", "admin_activity", "admin_holidays", "admin_users", "admin_user_new", "admin_user_logs", "floorplan", "admin_floorplans", "admin_roles", "pat", "settings_change_password"}
 	for _, page := range pages {
 		t, err := template.New("").Funcs(funcMap).ParseFS(
 			templateFS,
@@ -148,6 +150,8 @@ func main() {
 	// Render helper
 	renderPage := func(w http.ResponseWriter, r *http.Request, page string, data interface{}) {
 		user := middleware.GetUser(r)
+		// Resolve active language
+		lang := i18n.LangFromRequest(r, cfg.DefaultLang)
 		// Check if logo exists
 		logoExists := false
 		if cfg.LogoPath != "" {
@@ -170,14 +174,17 @@ func main() {
 				"FontFamily":     cfg.FontFamily,
 				"FontFamilyMono": cfg.FontFamilyMono,
 			},
-		User:              user,
-		Page:              page,
-		Data:              data,
-		SAMLEnabled:       cfg.SAMLEnabled,
-		HideFooter:        cfg.HideFooter,
-		AppVersion:        config.Version,
-		DisableFloorplans: cfg.DisableFloorplans,
-		DisableAPI:        cfg.DisableAPI,
+			User:              user,
+			Page:              page,
+			Data:              data,
+			SAMLEnabled:       cfg.SAMLEnabled,
+			HideFooter:        cfg.HideFooter,
+			AppVersion:        config.Version,
+			DisableFloorplans: cfg.DisableFloorplans,
+			DisableAPI:        cfg.DisableAPI,
+			T:                 i18n.T(lang),
+			Lang:              lang,
+			SupportedLangs:    i18n.Supported,
 		}
 		_ = logoExists
 		// Add logo flag to config map
@@ -261,6 +268,33 @@ func main() {
 
 	// Health check (public, no auth)
 	mux.HandleFunc("GET /health", healthHandler.Health)
+
+	// Language switcher (public, sets a cookie and redirects back)
+	mux.HandleFunc("POST /set-lang", func(w http.ResponseWriter, r *http.Request) {
+		lang := r.FormValue("lang")
+		valid := false
+		for _, s := range i18n.Supported {
+			if s.Code == lang {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			lang = cfg.DefaultLang
+		}
+		http.SetCookie(w, &http.Cookie{
+			Name:     "lang",
+			Value:    lang,
+			Path:     "/",
+			MaxAge:   365 * 24 * 3600,
+			SameSite: http.SameSiteLaxMode,
+		})
+		ref := r.Header.Get("Referer")
+		if ref == "" {
+			ref = "/"
+		}
+		http.Redirect(w, r, ref, http.StatusSeeOther)
+	})
 
 	// API documentation (public, disabled when DISABLE_API=true)
 	if !cfg.DisableAPI {
