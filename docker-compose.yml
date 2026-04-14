@@ -86,6 +86,15 @@ services:
       # - HIDE_FOOTER=true
 
       # =====================================================================
+      # FEATURES
+      # =====================================================================
+
+      # Set to "true" to disable all floor plan features:
+      # user floor plan page (/floorplan), seat reservation, and admin floor plan management
+      # Useful if your organisation does not use desk booking
+      # - DISABLE_FLOORPLANS=true
+
+      # =====================================================================
       # LOCAL AUTHENTICATION (ADMIN)
       # =====================================================================
 
