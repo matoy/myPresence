@@ -79,7 +79,7 @@
                         <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
                             <span class="font-semibold text-gray-800" x-text="selectedFpName"></span>
                             <div class="flex items-center gap-2">
-                                <span class="text-xs text-gray-400">Cliquer sur l'image pour ajouter un siège</span>
+                                <span class="text-xs text-gray-400">Cliquer pour ajouter · Glisser pour déplacer un siège</span>
                                 <!-- Upload image button -->
                                 <label class="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-medium transition">
                                     📷 Image
@@ -91,7 +91,7 @@
                         <!-- Image area -->
                         <div x-ref="imgContainer"
                              class="relative overflow-auto bg-gray-50"
-                             style="min-height: 300px; max-height: 70vh; touch-action: pan-x pan-y; cursor: crosshair;"
+                             :style="'min-height: 300px; max-height: 70vh; touch-action: pan-x pan-y; cursor: ' + (draggingSeat !== null ? 'grabbing' : 'crosshair') + ';'"
                              @click="handleImageClick($event)">
 
                             <template x-if="!currentImage">
@@ -106,12 +106,17 @@
 
                                     <!-- Existing seats -->
                                     <template x-for="seat in currentSeats" :key="seat.id">
-                                        <div :style="'position:absolute;left:'+seat.x_pct+'%;top:'+seat.y_pct+'%;transform:translate(-50%,-50%);'"
-                                             class="group/seat w-8 h-8 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center shadow-md border-2 border-white cursor-pointer"
+                                        <div :style="'position:absolute;left:'+seat.x_pct+'%;top:'+seat.y_pct+'%;transform:translate(-50%,-50%);z-index:'+(draggingSeat===seat.id?10:1)+';'"
+                                             :class="draggingSeat === seat.id
+                                                 ? 'group/seat w-8 h-8 rounded-full bg-amber-400 text-white text-xs font-bold flex items-center justify-center shadow-xl border-2 border-amber-600 scale-125 cursor-grabbing'
+                                                 : 'group/seat w-8 h-8 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center shadow-md border-2 border-white cursor-grab'"
+                                             @mousedown.prevent.stop="startDragSeat(seat, $event)"
+                                             @click.stop
                                              :title="seat.label">
                                             <span x-text="seat.label.length<=3?seat.label:seat.label.substring(0,3)"></span>
-                                            <!-- Hover: delete button -->
-                                            <button @click.stop="confirmDeleteSeat(seat)"
+                                            <!-- Hover: delete button (hidden while dragging) -->
+                                            <button x-show="draggingSeat !== seat.id"
+                                                    @click.stop="confirmDeleteSeat(seat)"
                                                     class="absolute -top-2 -right-2 hidden group-hover/seat:flex w-5 h-5 bg-red-500 text-white rounded-full text-xs items-center justify-center shadow">×</button>
                                         </div>
                                     </template>
@@ -201,6 +206,7 @@ function adminFloorplanApp(allFloorplans) {
         currentImage: null,
         currentSeats: [],
         cacheBust: Date.now(),
+        draggingSeat: null,
         pendingSeat: null,
         seatModal: { show: false, label: '' },
         confirm: { show: false, title: '', message: '', action: ()=>{} },
@@ -348,6 +354,51 @@ function adminFloorplanApp(allFloorplans) {
             }
             this.seatModal = { show: false, label: '' };
             this.pendingSeat = null;
+        },
+
+        startDragSeat(seat, event) {
+            this.draggingSeat = seat.id;
+            const originalX = seat.x_pct;
+            const originalY = seat.y_pct;
+            const onMove = (e) => {
+                const img = this.$refs.planImg;
+                if (!img) return;
+                const rect = img.getBoundingClientRect();
+                seat.x_pct = parseFloat(Math.min(100, Math.max(0, (e.clientX - rect.left) / rect.width * 100)).toFixed(2));
+                seat.y_pct = parseFloat(Math.min(100, Math.max(0, (e.clientY - rect.top)  / rect.height * 100)).toFixed(2));
+            };
+            const onUp = async (e) => {
+                document.removeEventListener('mousemove', onMove);
+                document.removeEventListener('mouseup', onUp);
+                this.draggingSeat = null;
+                const img = this.$refs.planImg;
+                if (!img) return;
+                const rect = img.getBoundingClientRect();
+                const xPct = parseFloat(Math.min(100, Math.max(0, (e.clientX - rect.left) / rect.width * 100)).toFixed(2));
+                const yPct = parseFloat(Math.min(100, Math.max(0, (e.clientY - rect.top)  / rect.height * 100)).toFixed(2));
+                // Skip API call if position barely changed (treated as a click)
+                if (Math.abs(xPct - parseFloat(originalX)) < 0.5 && Math.abs(yPct - parseFloat(originalY)) < 0.5) {
+                    seat.x_pct = originalX;
+                    seat.y_pct = originalY;
+                    return;
+                }
+                seat.x_pct = xPct;
+                seat.y_pct = yPct;
+                const resp = await fetch(`/admin/seats/${seat.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ label: seat.label, x_pct: xPct, y_pct: yPct })
+                });
+                if (resp.ok) {
+                    this.showToast('Position mise à jour');
+                } else {
+                    seat.x_pct = originalX;
+                    seat.y_pct = originalY;
+                    this.showToast('Erreur', true);
+                }
+            };
+            document.addEventListener('mousemove', onMove);
+            document.addEventListener('mouseup', onUp);
         },
 
         confirmDeleteSeat(seat) {
