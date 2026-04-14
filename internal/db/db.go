@@ -1218,11 +1218,13 @@ func (d *DB) GetSeatsWithStatus(floorplanID, userID int64, date, half string) ([
 	return result, nil
 }
 
-// ReserveSeat books a seat for a user. Returns an error if already taken.
+// ReserveSeat books a seat for a user. Returns an error if already taken or if the
+// user already has a different seat reservation on the same day.
 func (d *DB) ReserveSeat(seatID, userID int64, date, half string) error {
 	if half == "" {
 		half = "full"
 	}
+	// Check the seat is not already taken for that period.
 	var count int
 	d.QueryRow(`
 		SELECT COUNT(*) FROM seat_reservations
@@ -1230,6 +1232,15 @@ func (d *DB) ReserveSeat(seatID, userID int64, date, half string) error {
 	`, seatID, date, half, half).Scan(&count)
 	if count > 0 {
 		return fmt.Errorf("ce siège est déjà réservé pour cette période")
+	}
+	// Check the user does not already have a reservation on that day (any seat).
+	var userCount int
+	d.QueryRow(`
+		SELECT COUNT(*) FROM seat_reservations
+		WHERE user_id = ? AND date = ? AND (half = ? OR half = 'full' OR ? = 'full')
+	`, userID, date, half, half).Scan(&userCount)
+	if userCount > 0 {
+		return fmt.Errorf("vous avez déjà réservé un siège pour cette journée")
 	}
 	_, err := d.Exec(
 		"INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, ?, ?)",

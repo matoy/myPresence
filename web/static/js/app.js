@@ -277,8 +277,8 @@ function calendarApp(statuses, currentUserId, isAdmin, presences) {
                 const resp = await fetch('/api/floorplans');
                 if (resp.ok) {
                     this.seatFloorplans = await resp.json();
-                    // Auto-select and load when there is exactly one plan
-                    if (this.seatFloorplans.length === 1) {
+                    // Auto-select the first plan and load its seats
+                    if (this.seatFloorplans.length > 0) {
                         this.seatFloorplanID = this.seatFloorplans[0].id;
                         await this.loadSeatModalSeats();
                     }
