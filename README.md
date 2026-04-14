@@ -16,13 +16,13 @@ A web application for managing employee presence and absences, built with Go and
 
 - **Personal monthly calendar**: each user enters their own presence/absences using click or drag-to-select; right-click a day to declare a half-day (AM or PM) with a different status per half
 - **Floor plans & desk reservations**: upload a floor map image, place clickable seats on it, and let users book desks directly from the calendar or the floor plan page
-- **REST API with Personal Access Tokens**: every feature is accessible via authenticated HTTP requests; users generate tokens with a chosen description and expiry; tokens carry no more permissions than the issuing user
 - **Team management**: assign users to teams
 - **Activity Report**: summary of billable days per team
 - **Customizable statuses**: color, label, billable flag (€)
 - **Public holidays**: displayed in grey on the calendar, with an optional imputation flag
 - **Role management**: granular per-user permissions
 - **SAML 2.0 SSO**: Microsoft Entra ID (Azure AD) integration with automatic user provisioning
+- **REST API with Personal Access Tokens**: every feature is accessible via authenticated HTTP requests; users generate tokens with a chosen description and expiry; tokens carry no more permissions than the issuing user
 
 ---
 
