@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
+	"sync"
 	"time"
 
 	"presence-app/internal/config"
@@ -28,6 +29,9 @@ type AuthHandler struct {
 	Config *config.Config
 	Render func(w http.ResponseWriter, r *http.Request, page string, data interface{})
 	SP     *saml.ServiceProvider
+	// pendingSAMLRequests stores in-flight SAML request IDs (id -> expiry time).
+	// Used to validate InResponseTo in the ACS response.
+	pendingSAMLRequests sync.Map
 }
 
 // InitSAML initializes the SAML service provider if configured.
@@ -204,6 +208,8 @@ func (h *AuthHandler) SAMLLogin(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login?error=Erreur+SSO", http.StatusSeeOther)
 		return
 	}
+	// Store the request ID so we can validate InResponseTo in the ACS handler.
+	h.pendingSAMLRequests.Store(authReq.ID, time.Now().Add(5*time.Minute))
 	http.Redirect(w, r, redirectURL.String(), http.StatusFound)
 }
 
@@ -219,11 +225,26 @@ func (h *AuthHandler) SAMLACS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	assertion, err := h.SP.ParseResponse(r, []string{""})
+	// Collect all non-expired pending request IDs and clean up stale ones.
+	now := time.Now()
+	var pendingIDs []string
+	h.pendingSAMLRequests.Range(func(key, value interface{}) bool {
+		if now.Before(value.(time.Time)) {
+			pendingIDs = append(pendingIDs, key.(string))
+		} else {
+			h.pendingSAMLRequests.Delete(key)
+		}
+		return true
+	})
+	assertion, err := h.SP.ParseResponse(r, pendingIDs)
 	if err != nil {
 		log.Printf("SAML Response error: %v", err)
 		http.Redirect(w, r, "/login?error=Authentification+SSO+échouée", http.StatusSeeOther)
 		return
+	}
+	// Remove the matched request ID to prevent replay.
+	if assertion.InResponseTo != "" {
+		h.pendingSAMLRequests.Delete(assertion.InResponseTo)
 	}
 
 	// Extract user attributes from SAML assertion
