@@ -56,9 +56,11 @@
                     <a href="/" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "calendar"}}bg-white/20 text-white{{end}}">
                         📅 Calendar
                     </a>
+                    {{if not .DisableFloorplans}}
                     <a href="/floorplan" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "floorplan"}}bg-white/20 text-white{{end}}">
                         🗺️ Plans
                     </a>
+                    {{end}}
                     {{if .User.HasRole "team_manager"}}
                     <a href="/admin/teams" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_teams"}}bg-white/20 text-white{{end}}">
                         👥 Teams
@@ -86,13 +88,15 @@
                     <a href="/admin/holidays" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_holidays"}}bg-white/20 text-white{{end}}">
                         🎌 Holidays
                     </a>
-                    <a href="/admin/users" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_users"}}bg-white/20 text-white{{end}}">
-                        👤 Users &amp; Roles
-                    </a>
                     {{end}}
-                    {{if .User.HasRole "floorplan_manager"}}
+                    {{if and (not .DisableFloorplans) (.User.HasRole "floorplan_manager")}}
                     <a href="/admin/floorplans" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_floorplans"}}bg-white/20 text-white{{end}}">
                         🗺️ Plans admin
+                    </a>
+                    {{end}}
+                    {{if .User.HasRole "global"}}
+                    <a href="/admin/users" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_users"}}bg-white/20 text-white{{end}}">
+                        👤 Users &amp; Roles
                     </a>
                     {{end}}
                     <div class="border-l border-white/30 pl-4 flex items-center space-x-3">
@@ -118,7 +122,9 @@
         <div x-show="mobileMenu" x-transition class="md:hidden bg-primary/95 border-t border-white/10">
             <div class="px-4 py-3 space-y-2">
                 <a href="/" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">📅 Calendar</a>
+                {{if not .DisableFloorplans}}
                 <a href="/floorplan" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">🗺️ Plans</a>
+                {{end}}
                 {{if .User.HasRole "team_manager"}}
                 <a href="/admin/teams" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">👥 Teams</a>
                 {{else if .User.HasRole "team_leader"}}
@@ -134,10 +140,12 @@
                 {{end}}
                 {{if .User.HasRole "global"}}
                 <a href="/admin/holidays" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">🎌 Holidays</a>
-                <a href="/admin/users" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">👤 Users &amp; Roles</a>
                 {{end}}
-                {{if .User.HasRole "floorplan_manager"}}
+                {{if and (not .DisableFloorplans) (.User.HasRole "floorplan_manager")}}
                 <a href="/admin/floorplans" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">🗺️ Plans admin</a>
+                {{end}}
+                {{if .User.HasRole "global"}}
+                <a href="/admin/users" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">👤 Users &amp; Roles</a>
                 {{end}}
                 <div class="border-t border-white/20 pt-2 mt-2">
                     <span class="block text-white/60 text-sm px-3">{{.User.Name}}</span>

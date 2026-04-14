@@ -356,3 +356,95 @@ func (h *FloorplanHandler) DeleteSeat(w http.ResponseWriter, r *http.Request) {
 	h.DB.DeleteSeat(id)
 	jsonOK(w, map[string]string{"status": "ok"})
 }
+
+// ----------------------------------------------------------------
+// User-accessible floorplan/seat listing APIs
+// ----------------------------------------------------------------
+
+// ListFloorplansAPI returns all floorplans as JSON (no auth beyond login required).
+func (h *FloorplanHandler) ListFloorplansAPI(w http.ResponseWriter, r *http.Request) {
+	floorplans, err := h.DB.ListFloorplans()
+	if err != nil {
+		jsonError(w, "Erreur", http.StatusInternalServerError)
+		return
+	}
+	if floorplans == nil {
+		floorplans = []models.Floorplan{}
+	}
+	jsonOK(w, floorplans)
+}
+
+// ListSeatsForFloorplanAPI returns the seats for a floorplan without booking status
+// (user-accessible, used by the calendar seat-picker modal).
+func (h *FloorplanHandler) ListSeatsForFloorplanAPI(w http.ResponseWriter, r *http.Request) {
+	fpID, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if fpID == 0 {
+		jsonError(w, "ID manquant", http.StatusBadRequest)
+		return
+	}
+	seats, err := h.DB.ListSeats(fpID)
+	if err != nil {
+		jsonError(w, "Erreur", http.StatusInternalServerError)
+		return
+	}
+	if seats == nil {
+		seats = []models.Seat{}
+	}
+	jsonOK(w, seats)
+}
+
+// BulkReserveSeats handles POST /api/reservations/bulk.
+// It attempts to book the given seat for each date in the list,
+// silently skipping dates where the user is not on-site or the seat is taken.
+func (h *FloorplanHandler) BulkReserveSeats(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUser(r)
+	var req struct {
+		SeatID int64    `json:"seat_id"`
+		Dates  []string `json:"dates"`
+		Half   string   `json:"half"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "Requête invalide", http.StatusBadRequest)
+		return
+	}
+	if req.SeatID == 0 || len(req.Dates) == 0 {
+		jsonError(w, "Paramètres manquants", http.StatusBadRequest)
+		return
+	}
+	for _, d := range req.Dates {
+		if _, err := time.Parse("2006-01-02", d); err != nil {
+			jsonError(w, "Date invalide: "+d, http.StatusBadRequest)
+			return
+		}
+	}
+	count := h.DB.BulkReserveSeat(req.SeatID, user.ID, req.Dates, req.Half)
+	jsonOK(w, map[string]interface{}{"booked": count})
+}
+
+// CancelReservationsByDates handles DELETE /api/reservations/bulk.
+// It removes all seat reservations for the requesting user on the given list of dates.
+func (h *FloorplanHandler) CancelReservationsByDates(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUser(r)
+	var req struct {
+		Dates []string `json:"dates"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "Requête invalide", http.StatusBadRequest)
+		return
+	}
+	if len(req.Dates) == 0 {
+		jsonError(w, "Paramètres manquants", http.StatusBadRequest)
+		return
+	}
+	for _, d := range req.Dates {
+		if _, err := time.Parse("2006-01-02", d); err != nil {
+			jsonError(w, "Date invalide: "+d, http.StatusBadRequest)
+			return
+		}
+	}
+	if err := h.DB.CancelUserReservationsForDates(user.ID, req.Dates); err != nil {
+		jsonError(w, "Erreur", http.StatusInternalServerError)
+		return
+	}
+	jsonOK(w, map[string]string{"status": "ok"})
+}

@@ -1138,3 +1138,63 @@ func (d *DB) GetUserOnSiteStatus(userID int64, date string) (bool, error) {
 	`, userID, date).Scan(&count)
 	return count > 0, err
 }
+
+// GetUserReservationDates returns the set of dates within [startDate, endDate] for which
+// the user has at least one seat reservation. The map value is always true.
+func (d *DB) GetUserReservationDates(userID int64, startDate, endDate string) (map[string]bool, error) {
+	rows, err := d.Query(
+		`SELECT DISTINCT date FROM seat_reservations WHERE user_id = ? AND date >= ? AND date <= ?`,
+		userID, startDate, endDate,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := make(map[string]bool)
+	for rows.Next() {
+		var date string
+		if err := rows.Scan(&date); err != nil {
+			return nil, err
+		}
+		m[date] = true
+	}
+	return m, rows.Err()
+}
+
+// BulkReserveSeat attempts to reserve seatID for userID on each of the given dates.
+// It silently skips dates where the user is not on-site or the seat is already taken.
+// Returns the number of successful bookings.
+func (d *DB) BulkReserveSeat(seatID, userID int64, dates []string, half string) int {
+	if half == "" {
+		half = "full"
+	}
+	count := 0
+	for _, date := range dates {
+		isOnSite, _ := d.GetUserOnSiteStatus(userID, date)
+		if !isOnSite {
+			continue
+		}
+		if err := d.ReserveSeat(seatID, userID, date, half); err == nil {
+			count++
+		}
+	}
+	return count
+}
+
+// CancelUserReservationsForDates removes all seat reservations for userID on the given dates.
+func (d *DB) CancelUserReservationsForDates(userID int64, dates []string) error {
+	if len(dates) == 0 {
+		return nil
+	}
+	placeholders := make([]string, len(dates))
+	args := []interface{}{userID}
+	for i, date := range dates {
+		placeholders[i] = "?"
+		args = append(args, date)
+	}
+	_, err := d.Exec(
+		"DELETE FROM seat_reservations WHERE user_id = ? AND date IN ("+strings.Join(placeholders, ",")+")",
+		args...,
+	)
+	return err
+}

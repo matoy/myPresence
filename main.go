@@ -167,12 +167,13 @@ func main() {
 				"FontFamily":     cfg.FontFamily,
 				"FontFamilyMono": cfg.FontFamilyMono,
 			},
-			User:        user,
-			Page:        page,
-			Data:        data,
-			SAMLEnabled: cfg.SAMLEnabled,
-			HideFooter:  cfg.HideFooter,
-			AppVersion:  config.Version,
+		User:              user,
+		Page:              page,
+		Data:              data,
+		SAMLEnabled:       cfg.SAMLEnabled,
+		HideFooter:        cfg.HideFooter,
+		AppVersion:        config.Version,
+		DisableFloorplans: cfg.DisableFloorplans,
 		}
 		_ = logoExists
 		// Add logo flag to config map
@@ -195,7 +196,7 @@ func main() {
 	// Initialize handlers
 	healthHandler := &handlers.HealthHandler{DB: database, StartedAt: time.Now()}
 	authHandler := &handlers.AuthHandler{DB: database, Config: cfg, Render: renderPage}
-	calHandler := &handlers.CalendarHandler{DB: database, Render: renderPage}
+	calHandler := &handlers.CalendarHandler{DB: database, Render: renderPage, DisableFloorplans: cfg.DisableFloorplans}
 	adminHandler := &handlers.AdminHandler{DB: database, Render: renderPage}
 	activityHandler := &handlers.ActivityHandler{DB: database, Render: renderPage}
 	holidaysHandler := &handlers.HolidaysHandler{DB: database, Render: renderPage}
@@ -219,21 +220,23 @@ func main() {
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(staticSub)))
 
 	// Serve floorplan images from data directory
-	mux.HandleFunc("GET /floorplan-img/", func(w http.ResponseWriter, r *http.Request) {
-		name := filepath.Base(r.URL.Path)
-		// Only serve files matching expected pattern: floorplan_<id>.<ext>
-		if !strings.HasPrefix(name, "floorplan_") {
-			http.NotFound(w, r)
-			return
-		}
-		ext := strings.ToLower(filepath.Ext(name))
-		allowed := map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true}
-		if !allowed[ext] {
-			http.NotFound(w, r)
-			return
-		}
-		http.ServeFile(w, r, filepath.Join(cfg.DataDir, name))
-	})
+	if !cfg.DisableFloorplans {
+		mux.HandleFunc("GET /floorplan-img/", func(w http.ResponseWriter, r *http.Request) {
+			name := filepath.Base(r.URL.Path)
+			// Only serve files matching expected pattern: floorplan_<id>.<ext>
+			if !strings.HasPrefix(name, "floorplan_") {
+				http.NotFound(w, r)
+				return
+			}
+			ext := strings.ToLower(filepath.Ext(name))
+			allowed := map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true}
+			if !allowed[ext] {
+				http.NotFound(w, r)
+				return
+			}
+			http.ServeFile(w, r, filepath.Join(cfg.DataDir, name))
+		})
+	}
 
 	// Serve logo and data files
 	mux.HandleFunc("GET /data/", func(w http.ResponseWriter, r *http.Request) {
@@ -273,10 +276,16 @@ func main() {
 	authMux.HandleFunc("GET /api/presences", calHandler.GetPresencesAPI)
 
 	// Floorplan user routes
-	authMux.HandleFunc("GET /floorplan", floorplanHandler.FloorplanPage)
-	authMux.HandleFunc("GET /api/seats", floorplanHandler.SeatsAPI)
-	authMux.HandleFunc("POST /api/reservations", floorplanHandler.ReserveSeat)
-	authMux.HandleFunc("DELETE /api/reservations/{id}", floorplanHandler.CancelReservation)
+	if !cfg.DisableFloorplans {
+		authMux.HandleFunc("GET /floorplan", floorplanHandler.FloorplanPage)
+		authMux.HandleFunc("GET /api/seats", floorplanHandler.SeatsAPI)
+		authMux.HandleFunc("GET /api/floorplans", floorplanHandler.ListFloorplansAPI)
+		authMux.HandleFunc("GET /api/floorplans/{id}/seats", floorplanHandler.ListSeatsForFloorplanAPI)
+		authMux.HandleFunc("POST /api/reservations", floorplanHandler.ReserveSeat)
+		authMux.HandleFunc("POST /api/reservations/bulk", floorplanHandler.BulkReserveSeats)
+		authMux.HandleFunc("DELETE /api/reservations/bulk", floorplanHandler.CancelReservationsByDates)
+		authMux.HandleFunc("DELETE /api/reservations/{id}", floorplanHandler.CancelReservation)
+	}
 
 	// Admin routes - each section guarded by its own role
 	teamMux := http.NewServeMux()
@@ -317,18 +326,6 @@ func main() {
 		http.Redirect(w, r, "/admin/users", http.StatusMovedPermanently)
 	})
 
-	// Floorplan admin routes
-	fpAdminMux := http.NewServeMux()
-	fpAdminMux.HandleFunc("GET /admin/floorplans", floorplanHandler.AdminFloorplansPage)
-	fpAdminMux.HandleFunc("POST /admin/floorplans", floorplanHandler.CreateFloorplan)
-	fpAdminMux.HandleFunc("PUT /admin/floorplans/{id}", floorplanHandler.UpdateFloorplan)
-	fpAdminMux.HandleFunc("DELETE /admin/floorplans/{id}", floorplanHandler.DeleteFloorplan)
-	fpAdminMux.HandleFunc("POST /admin/floorplans/{id}/image", floorplanHandler.UploadFloorplanImage)
-	fpAdminMux.HandleFunc("POST /admin/floorplans/{id}/seats", floorplanHandler.CreateSeat)
-	fpAdminMux.HandleFunc("PUT /admin/seats/{id}", floorplanHandler.UpdateSeat)
-	fpAdminMux.HandleFunc("DELETE /admin/seats/{id}", floorplanHandler.DeleteSeat)
-	fpAdminMux.HandleFunc("GET /api/admin/seats", floorplanHandler.AdminListSeats)
-
 	// Wire role-based middleware
 	mux.Handle("/admin/teams", middleware.Auth(database, middleware.RequireRole(models.RoleTeamManager, models.RoleTeamLeader)(teamMux)))
 	mux.Handle("/admin/teams/", middleware.Auth(database, middleware.RequireRole(models.RoleTeamManager, models.RoleTeamLeader)(teamMux)))
@@ -343,10 +340,23 @@ func main() {
 	mux.Handle("/api/users/", middleware.Auth(database, middleware.RequireRole(models.RoleGlobal)(usersMux)))
 	mux.Handle("/admin/users", middleware.Auth(database, middleware.RequireRole(models.RoleGlobal)(usersMux)))
 	mux.Handle("/admin/users/", middleware.Auth(database, middleware.RequireRole(models.RoleGlobal)(usersMux)))
-	mux.Handle("/admin/floorplans", middleware.Auth(database, middleware.RequireRole(models.RoleFloorplanManager)(fpAdminMux)))
-	mux.Handle("/admin/floorplans/", middleware.Auth(database, middleware.RequireRole(models.RoleFloorplanManager)(fpAdminMux)))
-	mux.Handle("/admin/seats/", middleware.Auth(database, middleware.RequireRole(models.RoleFloorplanManager)(fpAdminMux)))
-	mux.Handle("/api/admin/", middleware.Auth(database, middleware.RequireRole(models.RoleFloorplanManager)(fpAdminMux)))
+	if !cfg.DisableFloorplans {
+		// Floorplan admin routes
+		fpAdminMux := http.NewServeMux()
+		fpAdminMux.HandleFunc("GET /admin/floorplans", floorplanHandler.AdminFloorplansPage)
+		fpAdminMux.HandleFunc("POST /admin/floorplans", floorplanHandler.CreateFloorplan)
+		fpAdminMux.HandleFunc("PUT /admin/floorplans/{id}", floorplanHandler.UpdateFloorplan)
+		fpAdminMux.HandleFunc("DELETE /admin/floorplans/{id}", floorplanHandler.DeleteFloorplan)
+		fpAdminMux.HandleFunc("POST /admin/floorplans/{id}/image", floorplanHandler.UploadFloorplanImage)
+		fpAdminMux.HandleFunc("POST /admin/floorplans/{id}/seats", floorplanHandler.CreateSeat)
+		fpAdminMux.HandleFunc("PUT /admin/seats/{id}", floorplanHandler.UpdateSeat)
+		fpAdminMux.HandleFunc("DELETE /admin/seats/{id}", floorplanHandler.DeleteSeat)
+		fpAdminMux.HandleFunc("GET /api/admin/seats", floorplanHandler.AdminListSeats)
+		mux.Handle("/admin/floorplans", middleware.Auth(database, middleware.RequireRole(models.RoleFloorplanManager)(fpAdminMux)))
+		mux.Handle("/admin/floorplans/", middleware.Auth(database, middleware.RequireRole(models.RoleFloorplanManager)(fpAdminMux)))
+		mux.Handle("/admin/seats/", middleware.Auth(database, middleware.RequireRole(models.RoleFloorplanManager)(fpAdminMux)))
+		mux.Handle("/api/admin/", middleware.Auth(database, middleware.RequireRole(models.RoleFloorplanManager)(fpAdminMux)))
+	}
 	mux.Handle("/", middleware.Auth(database, authMux))
 
 	// Start server
