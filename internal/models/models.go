@@ -98,6 +98,9 @@ func (u *User) CanUseTokens() bool {
 // FilterUsersByText returns users whose name or email contains q (case-insensitive).
 // A blank query returns all users unchanged.
 func FilterUsersByText(users []User, q string) []User {
+	if users == nil {
+		return nil
+	}
 	if q == "" {
 		return users
 	}
