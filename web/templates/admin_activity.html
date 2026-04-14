@@ -52,8 +52,14 @@
     </div>
 
     <!-- Summary Stats Table -->
+    <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold text-gray-800">📊 Récapitulatif</h2>
+        <button onclick="exportTable('summary-table', 'recap_{{.MonthName}}_{{.Year}}')" class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 shadow-sm transition">
+            📥 Export Excel
+        </button>
+    </div>
     <div class="bg-white rounded-xl shadow-md overflow-x-auto mb-6">
-        <table class="w-full border-collapse">
+        <table id="summary-table" class="w-full border-collapse">
             <thead>
                 <tr class="bg-gray-50">
                     <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase border-b border-gray-200">
@@ -182,9 +188,14 @@
     </div>
 
     <!-- Daily Breakdown Table -->
-    <h2 class="text-lg font-semibold text-gray-800 mb-3">📅 Daily Breakdown</h2>
+    <div class="flex items-center justify-between mb-3">
+        <h2 class="text-lg font-semibold text-gray-800">📅 Daily Breakdown</h2>
+        <button onclick="exportTable('daily-table', 'daily_{{.MonthName}}_{{.Year}}')" class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 shadow-sm transition">
+            📥 Export Excel
+        </button>
+    </div>
     <div class="bg-white rounded-xl shadow-md overflow-x-auto">
-        <table class="border-collapse text-xs">
+        <table id="daily-table" class="border-collapse text-xs">
             <thead>
                 <tr class="bg-gray-50">
                     <th class="px-3 py-2 text-left text-xs font-semibold text-gray-500 uppercase border-b border-r border-gray-200 sticky left-0 bg-gray-50 z-10">
@@ -289,5 +300,18 @@
     </div>
     {{end}}
 </div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+function exportTable(tableId, filename) {
+    if (typeof XLSX === 'undefined') {
+        alert('Impossible de charger la librairie Excel. Vérifiez votre connexion.');
+        return;
+    }
+    const el = document.getElementById(tableId);
+    if (!el) return;
+    const wb = XLSX.utils.table_to_book(el, { sheet: 'Données', raw: false });
+    XLSX.writeFile(wb, filename.replace(/[^a-zA-Z0-9_\-]/g, '_') + '.xlsx');
+}
+</script>
 {{end}}
 {{end}}

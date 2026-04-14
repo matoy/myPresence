@@ -184,10 +184,12 @@ func (h *UsersAdminHandler) UserLogsPage(w http.ResponseWriter, r *http.Request)
 	adminLogs, _ := h.DB.GetAdminLogsByActor(id, since)
 	statuses, _ := h.DB.ListStatuses()
 	h.Render(w, r, "admin_user_logs", map[string]interface{}{
-		"TargetUser": targetUser,
-		"Logs":       logs,
-		"AdminLogs":  adminLogs,
-		"Statuses":   statuses,
-		"Days":       days,
+		"TargetUser":       targetUser,
+		"Logs":             logs,
+		"AdminLogs":        adminLogs,
+		"Statuses":         statuses,
+		"Days":             days,
+		"FilterBaseURL":    "/admin/users/" + strconv.FormatInt(id, 10) + "/logs",
+		"HideAdminSection": false,
 	})
 }

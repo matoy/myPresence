@@ -132,7 +132,7 @@ func main() {
 	}
 
 	templates := make(map[string]*template.Template)
-	pages := []string{"login", "calendar", "admin_teams", "admin_statuses", "admin_activity", "admin_holidays", "admin_users", "admin_user_new", "admin_user_logs", "floorplan", "admin_floorplans", "pat"}
+	pages := []string{"login", "calendar", "admin_teams", "admin_statuses", "admin_activity", "admin_holidays", "admin_users", "admin_user_new", "admin_user_logs", "floorplan", "admin_floorplans", "pat", "settings_change_password"}
 	for _, page := range pages {
 		t, err := template.New("").Funcs(funcMap).ParseFS(
 			templateFS,
@@ -206,6 +206,7 @@ func main() {
 	holidaysHandler := &handlers.HolidaysHandler{DB: database, Render: renderPage}
 	usersAdminHandler := &handlers.UsersAdminHandler{DB: database, Render: renderPage}
 	floorplanHandler := &handlers.FloorplanHandler{DB: database, DataDir: cfg.DataDir, Render: renderPage}
+	settingsHandler := &handlers.SettingsHandler{DB: database, Render: renderPage}
 	var patHandler *handlers.PATHandler
 	if !cfg.DisableAPI {
 		patHandler = &handlers.PATHandler{DB: database, Render: renderPage}
@@ -299,6 +300,11 @@ func main() {
 		authMux.HandleFunc("POST /api/tokens", patHandler.CreatePAT)
 		authMux.HandleFunc("DELETE /api/tokens/{id}", patHandler.RevokePAT)
 	}
+
+	// Personal settings
+	authMux.HandleFunc("GET /settings/my-logs", settingsHandler.MyLogsPage)
+	authMux.HandleFunc("GET /settings/change-password", settingsHandler.ChangePasswordPage)
+	authMux.HandleFunc("POST /settings/change-password", settingsHandler.ChangePasswordPost)
 
 	// Floorplan user routes
 	if !cfg.DisableFloorplans {

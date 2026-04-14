@@ -220,3 +220,54 @@ func TestFilterUsersByText_Empty(t *testing.T) {
 		t.Errorf("expected empty slice, got %v", got)
 	}
 }
+
+// TestFilterUsersByText_EmptyQuery verifies that an empty query returns all users unchanged
+// (models the "search field starts empty → all users visible" behaviour on page load).
+func TestFilterUsersByText_EmptyQuery(t *testing.T) {
+	users := []User{
+		{Name: "Alice", Email: "alice@example.com"},
+		{Name: "Bob", Email: "bob@example.com"},
+	}
+	got := FilterUsersByText(users, "")
+	if len(got) != len(users) {
+		t.Errorf("empty query: got %d results, want %d", len(got), len(users))
+	}
+}
+
+// TestBasicUserHasNoAdminRole verifies that a user with only the basic role
+// has no elevated roles (drives the HideAdminSection logic in MyLogsPage).
+func TestBasicUserHasNoAdminRole(t *testing.T) {
+	adminRoles := []string{
+		RoleGlobal, RoleTeamManager, RoleTeamLeader,
+		RoleStatusManager, RoleActivityViewer, RoleFloorplanManager,
+	}
+	u := &User{Roles: RoleBasic}
+	for _, role := range adminRoles {
+		if u.HasRole(role) {
+			t.Errorf("basic-only user should not have role %q", role)
+		}
+	}
+}
+
+// TestNonBasicUserHasAdminRole verifies that users with any elevated role
+// are correctly detected (drives HideAdminSection = false).
+func TestNonBasicUserHasAdminRole(t *testing.T) {
+	elevated := []string{
+		RoleGlobal, RoleTeamManager, RoleTeamLeader,
+		RoleStatusManager, RoleActivityViewer, RoleFloorplanManager,
+	}
+	for _, role := range elevated {
+		u := &User{Roles: role}
+		if !u.HasAnyRole(RoleGlobal, RoleTeamManager, RoleTeamLeader, RoleStatusManager, RoleActivityViewer, RoleFloorplanManager) {
+			t.Errorf("user with role %q should be detected as having an admin role", role)
+		}
+	}
+}
+
+// TestBasicPlusElevatedUserIsDetected ensures "basic,team_manager" is treated as elevated.
+func TestBasicPlusElevatedUserIsDetected(t *testing.T) {
+	u := &User{Roles: "basic,team_manager"}
+	if !u.HasAnyRole(RoleGlobal, RoleTeamManager, RoleTeamLeader, RoleStatusManager, RoleActivityViewer, RoleFloorplanManager) {
+		t.Error("user with basic+team_manager should be detected as elevated")
+	}
+}
