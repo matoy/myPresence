@@ -81,6 +81,37 @@ func (u *User) RoleList() []string {
 	return roles
 }
 
+// CanUseTokens returns true if the user has at least one role beyond "basic".
+// Users with only the basic role are not allowed to create Personal Access Tokens.
+func (u *User) CanUseTokens() bool {
+	if u == nil {
+		return false
+	}
+	for _, r := range u.RoleList() {
+		if r != RoleBasic {
+			return true
+		}
+	}
+	return false
+}
+
+// FilterUsersByText returns users whose name or email contains q (case-insensitive).
+// A blank query returns all users unchanged.
+func FilterUsersByText(users []User, q string) []User {
+	if q == "" {
+		return users
+	}
+	lower := strings.ToLower(q)
+	result := make([]User, 0, len(users))
+	for _, u := range users {
+		if strings.Contains(strings.ToLower(u.Name), lower) ||
+			strings.Contains(strings.ToLower(u.Email), lower) {
+			result = append(result, u)
+		}
+	}
+	return result
+}
+
 // Team represents a team of users.
 type Team struct {
 	ID        int64     `json:"id"`

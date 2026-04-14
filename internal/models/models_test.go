@@ -147,3 +147,76 @@ func TestUserStats_HalfDayAccounting(t *testing.T) {
 		t.Errorf("StatusCounts sum = %v, want 2.0", sum)
 	}
 }
+
+// TestCanUseTokens verifies that only users with a role beyond "basic" can create PATs.
+func TestCanUseTokens(t *testing.T) {
+	tests := []struct {
+		roles string
+		want  bool
+	}{
+		{"basic", false},
+		{"", false},
+		{"basic,team_manager", true},
+		{"global", true},
+		{"team_leader", true},
+		{"basic,global", true},
+		{"status_manager", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.roles, func(t *testing.T) {
+			u := &User{Roles: tt.roles}
+			if got := u.CanUseTokens(); got != tt.want {
+				t.Errorf("CanUseTokens() with roles=%q = %v, want %v", tt.roles, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCanUseTokens_Nil(t *testing.T) {
+	var u *User
+	if u.CanUseTokens() {
+		t.Error("nil user should return false for CanUseTokens")
+	}
+}
+
+// TestFilterUsersByText verifies case-insensitive name/email filtering.
+func TestFilterUsersByText(t *testing.T) {
+	users := []User{
+		{Name: "Alice Martin", Email: "alice@example.com"},
+		{Name: "Bob Dupont", Email: "bob@company.org"},
+		{Name: "Charlie", Email: "charlie@example.com"},
+	}
+
+	tests := []struct {
+		q    string
+		want int
+	}{
+		{"", 3},
+		{"alice", 1},
+		{"ALICE", 1},
+		{"example", 2},
+		{"xyz", 0},
+		{"bob", 1},
+		{"company", 1},
+		{"charlie@", 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.q, func(t *testing.T) {
+			got := FilterUsersByText(users, tt.q)
+			if len(got) != tt.want {
+				t.Errorf("FilterUsersByText(q=%q): got %d results, want %d", tt.q, len(got), tt.want)
+			}
+		})
+	}
+}
+
+// TestFilterUsersByText_Empty verifies behaviour on an empty input slice.
+func TestFilterUsersByText_Empty(t *testing.T) {
+	if got := FilterUsersByText(nil, "alice"); got != nil {
+		t.Errorf("expected nil for nil input, got %v", got)
+	}
+	if got := FilterUsersByText([]User{}, "alice"); len(got) != 0 {
+		t.Errorf("expected empty slice, got %v", got)
+	}
+}

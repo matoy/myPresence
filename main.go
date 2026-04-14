@@ -132,7 +132,7 @@ func main() {
 	}
 
 	templates := make(map[string]*template.Template)
-	pages := []string{"login", "calendar", "admin_teams", "admin_statuses", "admin_activity", "admin_holidays", "admin_users", "admin_user_logs", "floorplan", "admin_floorplans", "pat"}
+	pages := []string{"login", "calendar", "admin_teams", "admin_statuses", "admin_activity", "admin_holidays", "admin_users", "admin_user_new", "admin_user_logs", "floorplan", "admin_floorplans", "pat"}
 	for _, page := range pages {
 		t, err := template.New("").Funcs(funcMap).ParseFS(
 			templateFS,
@@ -339,6 +339,7 @@ func main() {
 
 	usersMux := http.NewServeMux()
 	usersMux.HandleFunc("GET /admin/users", usersAdminHandler.UsersPage)
+	usersMux.HandleFunc("GET /admin/users/new", usersAdminHandler.NewUserPage)
 	usersMux.HandleFunc("POST /admin/users", usersAdminHandler.CreateUser)
 	usersMux.HandleFunc("GET /admin/users/{id}/logs", usersAdminHandler.UserLogsPage)
 	usersMux.HandleFunc("PUT /admin/users/{id}", usersAdminHandler.UpdateUser)

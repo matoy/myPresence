@@ -24,7 +24,7 @@
 
     <!-- Teams List -->
     {{range $teamItem := .Teams}}
-    <div class="bg-white rounded-xl shadow-md p-6 mb-4" x-data="{ editName: false, showAddMember: false }">
+    <div class="bg-white rounded-xl shadow-md p-6 mb-4" x-data="{ editName: false, showAddMember: false, memberSearch: '' }">
         <div class="flex items-center justify-between mb-4">
             <div class="flex items-center gap-3">
                 <div class="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -71,15 +71,24 @@
         <!-- Add Member -->
         {{if $teamItem.CanEdit}}
         <div x-show="showAddMember" x-transition class="mb-4 p-3 bg-green-50 rounded-lg">
-            <select x-ref="memberSelect" class="px-3 py-2 border border-gray-300 rounded-lg text-sm mr-2">
-                {{range $allUsers}}
-                <option value="{{.ID}}">{{.Name}} ({{.Email}})</option>
-                {{end}}
-            </select>
-            <button @click="addMember({{.Team.ID}}, $refs.memberSelect.value); showAddMember = false"
-                    class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
-                Add
-            </button>
+            <input type="text" x-model="memberSearch"
+                   placeholder="Type a name or email…"
+                   autocomplete="off"
+                   @keydown.escape="showAddMember = false; memberSearch = ''"
+                   x-init="$watch('showAddMember', v => { if (v) $nextTick(() => $el.focus()); })"
+                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-green-400/50">
+            <div class="max-h-48 overflow-y-auto border border-gray-200 rounded-lg bg-white divide-y divide-gray-100">
+                <template x-for="u in allUsersForTeams.filter(u => memberSearch === '' || u.name.toLowerCase().includes(memberSearch.toLowerCase()) || u.email.toLowerCase().includes(memberSearch.toLowerCase()))" :key="u.id">
+                    <button type="button"
+                            @click="addMember({{.Team.ID}}, u.id); showAddMember = false; memberSearch = ''"
+                            class="w-full text-left px-3 py-2 hover:bg-green-50 transition flex flex-col">
+                        <span x-text="u.name" class="text-sm font-medium text-gray-800"></span>
+                        <span x-text="u.email" class="text-xs text-gray-500"></span>
+                    </button>
+                </template>
+                <div x-show="allUsersForTeams.filter(u => memberSearch === '' || u.name.toLowerCase().includes(memberSearch.toLowerCase()) || u.email.toLowerCase().includes(memberSearch.toLowerCase())).length === 0"
+                     class="px-3 py-3 text-sm text-gray-400 text-center">No users found</div>
+            </div>
         </div>
         {{end}}
 
@@ -121,5 +130,8 @@
     </div>
     {{end}}
 </div>
+<script>
+const allUsersForTeams = {{json .Users}};
+</script>
 {{end}}
 {{end}}

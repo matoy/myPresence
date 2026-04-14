@@ -27,7 +27,8 @@ func (h *PATHandler) PATPage(w http.ResponseWriter, r *http.Request) {
 		pats = []models.PersonalAccessToken{}
 	}
 	h.Render(w, r, "pat", map[string]interface{}{
-		"Tokens": pats,
+		"Tokens":    pats,
+		"CanCreate": user.CanUseTokens(),
 	})
 }
 
@@ -35,6 +36,10 @@ func (h *PATHandler) PATPage(w http.ResponseWriter, r *http.Request) {
 // Route: POST /api/tokens
 func (h *PATHandler) CreatePAT(w http.ResponseWriter, r *http.Request) {
 	user := middleware.GetUser(r)
+	if !user.CanUseTokens() {
+		jsonError(w, "Création de token non autorisée pour ce compte", http.StatusForbidden)
+		return
+	}
 
 	var req struct {
 		Description string `json:"description"`

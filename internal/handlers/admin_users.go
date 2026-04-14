@@ -34,6 +34,13 @@ func (h *UsersAdminHandler) UsersPage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// NewUserPage renders the dedicated local account creation page.
+func (h *UsersAdminHandler) NewUserPage(w http.ResponseWriter, r *http.Request) {
+	h.Render(w, r, "admin_user_new", map[string]interface{}{
+		"Error": r.URL.Query().Get("error"),
+	})
+}
+
 // CreateUser creates a new local user account.
 func (h *UsersAdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	email := strings.TrimSpace(r.FormValue("email"))
@@ -41,11 +48,11 @@ func (h *UsersAdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	password := r.FormValue("password")
 
 	if email == "" || name == "" || password == "" {
-		http.Redirect(w, r, "/admin/users?error=All+fields+are+required", http.StatusSeeOther)
+		http.Redirect(w, r, "/admin/users/new?error=All+fields+are+required", http.StatusSeeOther)
 		return
 	}
 	if err := h.DB.CreateLocalUser(email, name, password); err != nil {
-		http.Redirect(w, r, "/admin/users?error=Email+already+in+use", http.StatusSeeOther)
+		http.Redirect(w, r, "/admin/users/new?error=Email+already+in+use", http.StatusSeeOther)
 		return
 	}
 	currentUser := middleware.GetUser(r)
