@@ -242,10 +242,6 @@ func (h *AuthHandler) SAMLACS(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/login?error=Authentification+SSO+échouée", http.StatusSeeOther)
 		return
 	}
-	// Remove the matched request ID to prevent replay.
-	if assertion.InResponseTo != "" {
-		h.pendingSAMLRequests.Delete(assertion.InResponseTo)
-	}
 
 	// Extract user attributes from SAML assertion
 	email := getAttributeValue(assertion, "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress")
