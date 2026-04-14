@@ -94,6 +94,11 @@ services:
       # Useful if your organisation does not use desk booking
       # - DISABLE_FLOORPLANS=true
 
+      # Set to "true" to disable the REST API entirely:
+      # PAT (Personal Access Token) management, Bearer token authentication,
+      # all /api/* endpoints and the /api/docs documentation page
+      # - DISABLE_API=true
+
       # =====================================================================
       # LOCAL AUTHENTICATION (ADMIN)
       # =====================================================================
