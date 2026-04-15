@@ -103,6 +103,21 @@ services:
       # - DISABLE_API=true
 
       # =====================================================================
+      # OBSERVABILITY
+      # =====================================================================
+
+      # Prometheus metrics endpoint token (GET /metrics).
+      # Leave unset or empty to disable the endpoint entirely.
+      # Set a strong random value in production:
+      #   openssl rand -hex 32
+      # Prometheus scrape config example (in prometheus.yml):
+      #   - job_name: mypresence
+      #     bearer_token: <your-token>
+      #     static_configs:
+      #       - targets: ['presence-app:8080']
+      # - METRICS_TOKEN=change-me-strong-random-token
+
+      # =====================================================================
       # LOCAL AUTHENTICATION (ADMIN)
       # =====================================================================
 
