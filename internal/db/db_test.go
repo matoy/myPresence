@@ -19,7 +19,7 @@ func newTestDB(t *testing.T) *DB {
 // seedUser inserts a minimal user and returns its id.
 func seedUser(t *testing.T, db *DB, email string) int64 {
 	t.Helper()
-	res, err := db.Exec(
+	res, err := db.core.Exec(
 		"INSERT INTO users (email, name, role) VALUES (?, ?, 'basic')", email, email,
 	)
 	if err != nil {
@@ -32,7 +32,7 @@ func seedUser(t *testing.T, db *DB, email string) int64 {
 // seedOnSiteStatus inserts a status with on_site=1 and returns its id.
 func seedOnSiteStatus(t *testing.T, db *DB) int64 {
 	t.Helper()
-	res, err := db.Exec(
+	res, err := db.presence.Exec(
 		"INSERT INTO statuses (name, color, billable, on_site, sort_order) VALUES ('Présent', '#22c55e', 1, 1, 1)",
 	)
 	if err != nil {
@@ -45,13 +45,13 @@ func seedOnSiteStatus(t *testing.T, db *DB) int64 {
 // seedFloorplanAndSeat inserts a floorplan + one seat, returns (floorplanID, seatID).
 func seedFloorplanAndSeat(t *testing.T, db *DB, label string) (int64, int64) {
 	t.Helper()
-	fpRes, err := db.Exec("INSERT INTO floorplans (name) VALUES ('Test FP')")
+	fpRes, err := db.floorplan.Exec("INSERT INTO floorplans (name) VALUES ('Test FP')")
 	if err != nil {
 		t.Fatalf("seedFloorplan: %v", err)
 	}
 	fpID, _ := fpRes.LastInsertId()
 
-	sRes, err := db.Exec(
+	sRes, err := db.floorplan.Exec(
 		"INSERT INTO seats (floorplan_id, label, x_pct, y_pct) VALUES (?, ?, 50, 50)", fpID, label,
 	)
 	if err != nil {
@@ -83,7 +83,7 @@ func TestGetUserReservationDates_WithReservations(t *testing.T) {
 
 	dates := []string{"2026-04-14", "2026-04-15", "2026-04-16"}
 	for _, date := range dates {
-		_, err := d.Exec(
+		_, err := d.floorplan.Exec(
 			"INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, ?, 'full')",
 			seatID, userID, date,
 		)
@@ -123,7 +123,7 @@ func TestGetUserReservationDates_OtherUserIsolation(t *testing.T) {
 	_, seatID := seedFloorplanAndSeat(t, d, "B1")
 
 	// Only Bob has a reservation
-	d.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, '2026-04-14', 'full')", seatID, bob)
+	d.floorplan.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, '2026-04-14', 'full')", seatID, bob)
 
 	m, err := d.GetUserReservationDates(alice, "2026-04-01", "2026-04-30")
 	if err != nil {
@@ -157,8 +157,8 @@ func TestBulkReserveSeat_SuccessWhenOnSite(t *testing.T) {
 	_, seatID := seedFloorplanAndSeat(t, d, "D1")
 
 	// Declare on-site on two dates
-	d.Exec("INSERT INTO presences (user_id, date, half, status_id) VALUES (?, '2026-04-14', 'full', ?)", userID, statusID)
-	d.Exec("INSERT INTO presences (user_id, date, half, status_id) VALUES (?, '2026-04-15', 'full', ?)", userID, statusID)
+	d.presence.Exec("INSERT INTO presences (user_id, date, half, status_id) VALUES (?, '2026-04-14', 'full', ?)", userID, statusID)
+	d.presence.Exec("INSERT INTO presences (user_id, date, half, status_id) VALUES (?, '2026-04-15', 'full', ?)", userID, statusID)
 
 	count := d.BulkReserveSeat(seatID, userID, []string{"2026-04-14", "2026-04-15", "2026-04-16"}, "full")
 	if count != 2 {
@@ -174,11 +174,11 @@ func TestBulkReserveSeat_SkipsTakenSeat(t *testing.T) {
 	_, seatID := seedFloorplanAndSeat(t, d, "E1")
 
 	// Both on site
-	d.Exec("INSERT INTO presences (user_id, date, half, status_id) VALUES (?, '2026-04-14', 'full', ?)", alice, statusID)
-	d.Exec("INSERT INTO presences (user_id, date, half, status_id) VALUES (?, '2026-04-14', 'full', ?)", bob, statusID)
+	d.presence.Exec("INSERT INTO presences (user_id, date, half, status_id) VALUES (?, '2026-04-14', 'full', ?)", alice, statusID)
+	d.presence.Exec("INSERT INTO presences (user_id, date, half, status_id) VALUES (?, '2026-04-14', 'full', ?)", bob, statusID)
 
 	// Alice books first
-	d.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, '2026-04-14', 'full')", seatID, alice)
+	d.floorplan.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, '2026-04-14', 'full')", seatID, alice)
 
 	// Bob tries to bulk-reserve the same seat/date — should be skipped (conflict)
 	count := d.BulkReserveSeat(seatID, bob, []string{"2026-04-14"}, "full")
