@@ -250,6 +250,20 @@ func main() {
 		}
 	})
 
+	// Register health gauge collector for Prometheus
+	metrics.RegisterHealthCollector(func() metrics.HealthStats {
+		dbUp := 1.0
+		if err := database.Ping(); err != nil {
+			dbUp = 0
+		}
+		up := dbUp // currently the only check is DB
+		return metrics.HealthStats{
+			Up:            up,
+			UptimeSeconds: time.Since(healthHandler.StartedAt).Seconds(),
+			DBUp:          dbUp,
+		}
+	})
+
 	// Router
 	mux := http.NewServeMux()
 

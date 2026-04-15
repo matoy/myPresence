@@ -57,6 +57,50 @@ var (
 	}, []string{"action"}) // action: set|clear
 )
 
+// ─── Health gauges (collected on each scrape via callback) ───────────────────
+
+// HealthStats holds point-in-time health data derived from the /health check.
+type HealthStats struct {
+	Up            float64 // 1 = ok, 0 = degraded
+	UptimeSeconds float64
+	DBUp          float64 // 1 = ok, 0 = error
+}
+
+// RegisterHealthCollector constructs and registers a custom Prometheus collector
+// that invokes fn on every scrape to obtain current health data.
+func RegisterHealthCollector(fn func() HealthStats) {
+	prometheus.MustRegister(newHealthCollector(fn))
+}
+
+type healthCollector struct {
+	fn          func() HealthStats
+	descUp      *prometheus.Desc
+	descUptime  *prometheus.Desc
+	descDBUp    *prometheus.Desc
+}
+
+func newHealthCollector(fn func() HealthStats) *healthCollector {
+	return &healthCollector{
+		fn:         fn,
+		descUp:     prometheus.NewDesc("mypresence_up", "1 if the application is healthy, 0 if degraded.", nil, nil),
+		descUptime: prometheus.NewDesc("mypresence_uptime_seconds", "Seconds since the application started.", nil, nil),
+		descDBUp:   prometheus.NewDesc("mypresence_db_up", "1 if the database check passes, 0 otherwise.", nil, nil),
+	}
+}
+
+func (c *healthCollector) Describe(ch chan<- *prometheus.Desc) {
+	ch <- c.descUp
+	ch <- c.descUptime
+	ch <- c.descDBUp
+}
+
+func (c *healthCollector) Collect(ch chan<- prometheus.Metric) {
+	s := c.fn()
+	ch <- prometheus.MustNewConstMetric(c.descUp, prometheus.GaugeValue, s.Up)
+	ch <- prometheus.MustNewConstMetric(c.descUptime, prometheus.GaugeValue, s.UptimeSeconds)
+	ch <- prometheus.MustNewConstMetric(c.descDBUp, prometheus.GaugeValue, s.DBUp)
+}
+
 // ─── DB gauges (collected on each scrape via callback) ───────────────────────
 
 // DBStats holds point-in-time counts fetched from the database.

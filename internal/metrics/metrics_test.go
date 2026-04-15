@@ -4,7 +4,6 @@ package metrics
 // newDBCollector) are accessible.
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -75,23 +74,23 @@ func TestInstrument_StatusClass(t *testing.T) {
 	cases := []struct {
 		code  int
 		class string
+		path  string // must have no numeric segment to avoid normalization
 	}{
-		{http.StatusOK, "2xx"},
-		{http.StatusCreated, "2xx"},
-		{http.StatusFound, "3xx"},
-		{http.StatusNotFound, "4xx"},
-		{http.StatusForbidden, "4xx"},
-		{http.StatusInternalServerError, "5xx"},
+		{http.StatusOK, "2xx", "/test-sc-ok"},
+		{http.StatusCreated, "2xx", "/test-sc-created"},
+		{http.StatusFound, "3xx", "/test-sc-found"},
+		{http.StatusNotFound, "4xx", "/test-sc-notfound"},
+		{http.StatusForbidden, "4xx", "/test-sc-forbidden"},
+		{http.StatusInternalServerError, "5xx", "/test-sc-ise"},
 	}
 	for _, tc := range cases {
-		// Unique path per case so counts start at 0 and we avoid cross-test contamination.
-		path := fmt.Sprintf("/test-status-class/%d", tc.code)
-		before := testutil.ToFloat64(HTTPRequestsTotal.WithLabelValues("GET", path, tc.class))
-		req := httptest.NewRequest(http.MethodGet, path, nil)
+		before := testutil.ToFloat64(HTTPRequestsTotal.WithLabelValues("GET", tc.path, tc.class))
+		req := httptest.NewRequest(http.MethodGet, tc.path, nil)
 		Instrument(handlerCode(tc.code)).ServeHTTP(httptest.NewRecorder(), req)
-		after := testutil.ToFloat64(HTTPRequestsTotal.WithLabelValues("GET", path, tc.class))
+		after := testutil.ToFloat64(HTTPRequestsTotal.WithLabelValues("GET", tc.path, tc.class))
 		if delta := after - before; delta != 1 {
-			t.Errorf("code %d: expected counter delta 1 under class %q, got %v", tc.code, tc.class, delta)
+			t.Errorf("code %d: expected counter delta 1 under class %q at path %q, got %v",
+				tc.code, tc.class, tc.path, delta)
 		}
 	}
 }
@@ -322,6 +321,91 @@ func histogramSampleCount(t *testing.T, metricName, method, path string) uint64 
 		}
 	}
 	return 0
+}
+
+// ── healthCollector ───────────────────────────────────────────────────────────
+
+func newIsolatedHealthRegistry(fn func() HealthStats) *prometheus.Registry {
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(newHealthCollector(fn))
+	return reg
+}
+
+func TestHealthCollector_Describe_EmitsThreeDescs(t *testing.T) {
+	c := newHealthCollector(func() HealthStats { return HealthStats{} })
+	ch := make(chan *prometheus.Desc, 10)
+	c.Describe(ch)
+	close(ch)
+
+	var count int
+	for range ch {
+		count++
+	}
+	if count != 3 {
+		t.Errorf("Describe emitted %d descriptors, want 3", count)
+	}
+}
+
+func TestHealthCollector_Collect_AppAndDBUp(t *testing.T) {
+	reg := newIsolatedHealthRegistry(func() HealthStats {
+		return HealthStats{Up: 1, DBUp: 1, UptimeSeconds: 42}
+	})
+	if err := testutil.GatherAndCompare(reg, strings.NewReader(`
+# HELP mypresence_db_up 1 if the database check passes, 0 otherwise.
+# TYPE mypresence_db_up gauge
+mypresence_db_up 1
+# HELP mypresence_up 1 if the application is healthy, 0 if degraded.
+# TYPE mypresence_up gauge
+mypresence_up 1
+# HELP mypresence_uptime_seconds Seconds since the application started.
+# TYPE mypresence_uptime_seconds gauge
+mypresence_uptime_seconds 42
+`), "mypresence_up", "mypresence_db_up", "mypresence_uptime_seconds"); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestHealthCollector_Collect_AppAndDBDown(t *testing.T) {
+	reg := newIsolatedHealthRegistry(func() HealthStats {
+		return HealthStats{Up: 0, DBUp: 0, UptimeSeconds: 10}
+	})
+	if err := testutil.GatherAndCompare(reg, strings.NewReader(`
+# HELP mypresence_db_up 1 if the database check passes, 0 otherwise.
+# TYPE mypresence_db_up gauge
+mypresence_db_up 0
+# HELP mypresence_up 1 if the application is healthy, 0 if degraded.
+# TYPE mypresence_up gauge
+mypresence_up 0
+# HELP mypresence_uptime_seconds Seconds since the application started.
+# TYPE mypresence_uptime_seconds gauge
+mypresence_uptime_seconds 10
+`), "mypresence_up", "mypresence_db_up", "mypresence_uptime_seconds"); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestHealthCollector_Collect_UptimeUpdates(t *testing.T) {
+	var uptime float64 = 100
+	reg := newIsolatedHealthRegistry(func() HealthStats {
+		return HealthStats{Up: 1, DBUp: 1, UptimeSeconds: uptime}
+	})
+	// First scrape.
+	if err := testutil.GatherAndCompare(reg, strings.NewReader(`
+# HELP mypresence_uptime_seconds Seconds since the application started.
+# TYPE mypresence_uptime_seconds gauge
+mypresence_uptime_seconds 100
+`), "mypresence_uptime_seconds"); err != nil {
+		t.Errorf("first scrape: %v", err)
+	}
+	// Simulate time passing.
+	uptime = 200
+	if err := testutil.GatherAndCompare(reg, strings.NewReader(`
+# HELP mypresence_uptime_seconds Seconds since the application started.
+# TYPE mypresence_uptime_seconds gauge
+mypresence_uptime_seconds 200
+`), "mypresence_uptime_seconds"); err != nil {
+		t.Errorf("second scrape: %v", err)
+	}
 }
 
 // labelsMatch reports whether all entries in want are present in m's label pairs.

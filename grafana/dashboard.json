@@ -415,6 +415,107 @@
       "targets": [
         { "expr": "rate(go_gc_duration_seconds_sum[5m]) / rate(go_gc_duration_seconds_count[5m])", "legendFormat": "Avg GC pause", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }
       ]
+    },
+
+
+    { "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 68 }, "id": 60, "title": "🩺 App Health", "type": "row" },
+
+    {
+      "id": 61, "type": "stat",
+      "title": "App status",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 69 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "text": {}
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN",  "color": "red"   }, "1": { "text": "UP", "color": "green" } } }
+          ],
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      },
+      "targets": [{ "expr": "mypresence_up", "legendFormat": "App", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
+    },
+
+    {
+      "id": 62, "type": "stat",
+      "title": "Database status",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 69 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+          ],
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        }
+      },
+      "targets": [{ "expr": "mypresence_db_up", "legendFormat": "DB", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
+    },
+
+    {
+      "id": 63, "type": "stat",
+      "title": "Uptime",
+      "gridPos": { "h": 4, "w": 12, "x": 12, "y": 69 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "auto",
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "fixed", "fixedColor": "blue" }
+        }
+      },
+      "targets": [{ "expr": "mypresence_uptime_seconds", "legendFormat": "Uptime", "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }]
+    },
+
+    {
+      "id": 64, "type": "timeseries",
+      "title": "App & DB health over time",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 73 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "options": {
+        "tooltip": { "mode": "multi" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "min"] }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0, "max": 1,
+          "custom": { "lineWidth": 2, "fillOpacity": 20 },
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "0 (DOWN)" }, "1": { "text": "1 (UP)" } } }
+          ],
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "targets": [
+        { "expr": "mypresence_up",    "legendFormat": "App up",    "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } },
+        { "expr": "mypresence_db_up", "legendFormat": "DB up",     "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" } }
+      ]
     }
 
   ],
