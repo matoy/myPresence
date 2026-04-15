@@ -175,7 +175,7 @@
 
         <!-- Mobile menu -->
         <div x-show="mobileMenu" x-transition class="md:hidden bg-primary/95 border-t border-white/10">
-            <div class="px-4 py-3 space-y-2">
+            <div class="px-4 py-3 space-y-2 overflow-y-auto max-h-[calc(100dvh-5rem)]">
                 <a href="/" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">{{index .T "nav.calendar"}}</a>
                 {{if not .DisableFloorplans}}
                 <a href="/floorplan" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">{{index .T "nav.floorplans"}}</a>

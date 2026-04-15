@@ -24,6 +24,7 @@ function calendarApp(statuses, currentUserId, isAdmin, presences) {
         contextMenuDate: null,
         contextMenuUserId: null,
         pendingHalf: 'full',
+        longPressTimer: null,
 
         // Seat reservation modal state
         showSeatModal: false,
@@ -47,6 +48,21 @@ function calendarApp(statuses, currentUserId, isAdmin, presences) {
             // Only allow editing own presences (admin/manager can edit anyone)
             if (!this.isAdmin && userId !== this.currentUserId) return;
             if (this.isCellBlocked(userId, date)) return;
+
+            // Long-press (600ms) opens the context menu on mobile
+            if (this.longPressTimer) clearTimeout(this.longPressTimer);
+            this.longPressTimer = setTimeout(() => {
+                this.longPressTimer = null;
+                this.selecting = false;
+                this.selectedDates = [];
+                if (navigator.vibrate) navigator.vibrate(30);
+                const cell = document.querySelector(`[data-user-id="${userId}"][data-date="${date}"]`);
+                const rect = cell ? cell.getBoundingClientRect() : { left: 16, bottom: 120, width: 36 };
+                this.openContextMenu(userId, date, {
+                    clientX: Math.min(rect.left, window.innerWidth - 220),
+                    clientY: Math.min(rect.bottom + 4, window.innerHeight - 230)
+                });
+            }, 600);
 
             this.selecting = true;
             this.selectedUserId = userId;
@@ -79,6 +95,11 @@ function calendarApp(statuses, currentUserId, isAdmin, presences) {
 
         // Handle touch move for mobile
         handleTouchMove(event) {
+            // Cancel long-press if the finger moves
+            if (this.longPressTimer) {
+                clearTimeout(this.longPressTimer);
+                this.longPressTimer = null;
+            }
             if (!this.selecting) return;
             const touch = event.touches[0];
             const element = document.elementFromPoint(touch.clientX, touch.clientY);
@@ -384,6 +405,10 @@ function calendarApp(statuses, currentUserId, isAdmin, presences) {
 
             // End selection on touchend
             document.addEventListener('touchend', (e) => {
+                if (this.longPressTimer) {
+                    clearTimeout(this.longPressTimer);
+                    this.longPressTimer = null;
+                }
                 if (this.selecting && this.selectedDates.length > 0) {
                     this.showPicker = true;
                     

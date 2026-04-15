@@ -12,7 +12,7 @@
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
             </svg>
         </a>
-        <h2 class="text-xl sm:text-2xl font-bold text-gray-800 min-w-[200px] text-center">
+        <h2 class="text-xl sm:text-2xl font-bold text-gray-800 flex-1 text-center min-w-0">
             {{index $.T (printf "cal.month.%d" .Month)}} {{.Year}}
         </h2>
         <a href="/?year={{.NextYear}}&month={{.NextMonth}}"
@@ -39,7 +39,7 @@
 
     <!-- Calendar Table -->
     <div class="bg-white rounded-xl shadow-lg overflow-x-auto">
-        <table class="w-full table-fixed border-collapse">
+        <table class="table-fixed border-collapse w-full min-w-[960px]">
             <thead>
                 <tr class="bg-gray-50">
                     {{range $days}}
