@@ -206,7 +206,7 @@ func TestCancelUserReservationsForDates_RemovesOwn(t *testing.T) {
 
 	dates := []string{"2026-04-14", "2026-04-15"}
 	for _, date := range dates {
-		d.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, ?, 'full')", seatID, userID, date)
+		d.floorplan.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, ?, 'full')", seatID, userID, date)
 	}
 
 	if err := d.CancelUserReservationsForDates(userID, dates); err != nil {
@@ -225,8 +225,8 @@ func TestCancelUserReservationsForDates_PreservesOtherUser(t *testing.T) {
 	bob := seedUser(t, d, "bob3@test.com")
 	_, seatID := seedFloorplanAndSeat(t, d, "G1")
 
-	d.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, '2026-04-14', 'full')", seatID, alice)
-	d.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, '2026-04-15', 'full')", seatID, bob)
+	d.floorplan.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, '2026-04-14', 'full')", seatID, alice)
+	d.floorplan.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, '2026-04-15', 'full')", seatID, bob)
 
 	// Cancel only alice's dates
 	d.CancelUserReservationsForDates(alice, []string{"2026-04-14"})
