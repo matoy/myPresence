@@ -189,6 +189,14 @@ last_used_at DATETIME,
 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+user_id INTEGER NOT NULL,
+token_hash TEXT NOT NULL UNIQUE,
+expires_at DATETIME NOT NULL,
+created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
 `)
 if err != nil {
 return err
@@ -609,6 +617,70 @@ return nil, err
 u.IsLocal = u.PasswordHash != ""
 go d.core.Exec(`UPDATE personal_access_tokens SET last_used_at = datetime('now') WHERE token_hash = ?`, tokenHash) //nolint
 return &u, nil
+}
+
+// --- Password reset tokens ---
+
+// CreatePasswordResetToken generates a secure one-time token for the given email.
+// Returns the raw (unhashed) token to be sent by email.
+// Returns ("", nil) silently if no local account with that email exists (don't reveal existence).
+func (d *DB) CreatePasswordResetToken(email string) (string, error) {
+	u, err := d.GetUserByEmail(email)
+	if err != nil || u.PasswordHash == "" {
+		// No local account — return empty silently to avoid user enumeration
+		return "", nil
+	}
+
+	// Delete any existing token for this user
+	d.core.Exec(`DELETE FROM password_reset_tokens WHERE user_id = ?`, u.ID)
+
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	raw := hex.EncodeToString(b)
+	sum := sha256.Sum256([]byte(raw))
+	hash := hex.EncodeToString(sum[:])
+
+	expires := time.Now().Add(time.Hour)
+	_, err = d.core.Exec(
+		`INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)`,
+		u.ID, hash, expires.UTC().Format("2006-01-02 15:04:05"),
+	)
+	if err != nil {
+		return "", err
+	}
+	return raw, nil
+}
+
+// UsePasswordResetToken validates the token, marks it used (deleted), and returns the target user.
+// Returns an error if the token is invalid or expired.
+func (d *DB) UsePasswordResetToken(rawToken string) (*models.User, error) {
+	sum := sha256.Sum256([]byte(rawToken))
+	hash := hex.EncodeToString(sum[:])
+
+	var userID int64
+	var expiresAt time.Time
+	err := d.core.QueryRow(
+		`SELECT user_id, expires_at FROM password_reset_tokens WHERE token_hash = ?`, hash,
+	).Scan(&userID, &expiresAt)
+	if err != nil {
+		return nil, fmt.Errorf("invalid or unknown token")
+	}
+	if time.Now().After(expiresAt) {
+		d.core.Exec(`DELETE FROM password_reset_tokens WHERE token_hash = ?`, hash)
+		return nil, fmt.Errorf("token expired")
+	}
+
+	// Consume token immediately
+	d.core.Exec(`DELETE FROM password_reset_tokens WHERE token_hash = ?`, hash)
+
+	return d.GetUserByID(userID)
+}
+
+// CleanExpiredResetTokens removes expired password reset tokens.
+func (d *DB) CleanExpiredResetTokens() {
+	d.core.Exec(`DELETE FROM password_reset_tokens WHERE expires_at < datetime('now')`)
 }
 
 // --- User management ---

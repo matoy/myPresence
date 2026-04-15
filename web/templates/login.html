@@ -67,6 +67,13 @@
                         class="w-full py-2.5 bg-gray-800 text-white rounded-xl font-medium hover:bg-gray-700 transition">
                     {{index .T "login.submit"}}
                 </button>
+                {{if .SMTPEnabled}}
+                <div class="text-center mt-2">
+                    <a href="/forgot-password" class="text-sm text-gray-400 hover:text-gray-600 transition">
+                        {{index .T "login.forgot_password"}}
+                    </a>
+                </div>
+                {{end}}
             </form>
         </div>
 

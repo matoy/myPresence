@@ -45,6 +45,11 @@ type Config struct {
 	// Features
 	DisableFloorplans bool
 	DisableAPI        bool
+
+	// SMTP (password reset)
+	SMTPURL  string
+	SMTPFrom string
+	AppURL   string
 }
 
 // Load reads configuration from environment variables with sensible defaults.
@@ -79,6 +84,10 @@ func Load() *Config {
 
 		DisableFloorplans: getEnvBool("DISABLE_FLOORPLANS", false),
 		DisableAPI:        getEnvBool("DISABLE_API", false),
+
+		SMTPURL:  getEnv("SMTP_URL", ""),
+		SMTPFrom: getEnv("SMTP_FROM", "noreply@presence.local"),
+		AppURL:   getEnv("APP_URL", ""),
 	}
 	c.SAMLEnabled = c.SAMLIDPMetadataURL != "" && c.SAMLEntityID != ""
 	return c

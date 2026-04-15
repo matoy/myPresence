@@ -257,6 +257,7 @@ type PageData struct {
 	Flash       string
 	Data        interface{}
 	SAMLEnabled       bool
+	SMTPEnabled       bool
 	HideFooter        bool
 	AppVersion        string
 	DisableFloorplans bool

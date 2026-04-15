@@ -137,7 +137,7 @@ func main() {
 	}
 
 	templates := make(map[string]*template.Template)
-	pages := []string{"login", "calendar", "admin_teams", "admin_statuses", "admin_activity", "admin_holidays", "admin_users", "admin_user_new", "admin_user_logs", "floorplan", "admin_floorplans", "admin_roles", "pat", "settings_change_password"}
+	pages := []string{"login", "calendar", "admin_teams", "admin_statuses", "admin_activity", "admin_holidays", "admin_users", "admin_user_new", "admin_user_logs", "floorplan", "admin_floorplans", "admin_roles", "pat", "settings_change_password", "forgot_password", "reset_password"}
 	for _, page := range pages {
 		t, err := template.New("").Funcs(funcMap).ParseFS(
 			templateFS,
@@ -181,6 +181,7 @@ func main() {
 			Page:              page,
 			Data:              data,
 			SAMLEnabled:       cfg.SAMLEnabled,
+			SMTPEnabled:       cfg.SMTPURL != "",
 			HideFooter:        cfg.HideFooter,
 			AppVersion:        config.Version,
 			DisableFloorplans: cfg.DisableFloorplans,
@@ -217,6 +218,7 @@ func main() {
 	usersAdminHandler := &handlers.UsersAdminHandler{DB: database, Render: renderPage}
 	floorplanHandler := &handlers.FloorplanHandler{DB: database, DataDir: cfg.DataDir, Render: renderPage}
 	settingsHandler := &handlers.SettingsHandler{DB: database, Render: renderPage}
+	resetPasswordHandler := &handlers.ResetPasswordHandler{DB: database, Config: cfg, Render: renderPage}
 	var patHandler *handlers.PATHandler
 	if !cfg.DisableAPI {
 		patHandler = &handlers.PATHandler{DB: database, Render: renderPage}
@@ -312,6 +314,14 @@ func main() {
 	mux.Handle("GET /login", middleware.OptionalAuth(database, http.HandlerFunc(authHandler.LoginPage)))
 	mux.HandleFunc("POST /login", authHandler.LocalLogin)
 	mux.HandleFunc("GET /logout", authHandler.Logout)
+
+	// Password reset routes (public, only active when SMTP is configured)
+	if cfg.SMTPURL != "" {
+		mux.HandleFunc("GET /forgot-password", resetPasswordHandler.ForgotPasswordPage)
+		mux.HandleFunc("POST /forgot-password", resetPasswordHandler.ForgotPasswordPost)
+		mux.HandleFunc("GET /reset-password", resetPasswordHandler.ResetPasswordPage)
+		mux.HandleFunc("POST /reset-password", resetPasswordHandler.ResetPasswordPost)
+	}
 
 	// SAML routes
 	mux.HandleFunc("GET /saml/metadata", authHandler.SAMLMetadata)

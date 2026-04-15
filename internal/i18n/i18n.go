@@ -345,9 +345,25 @@ var en = map[string]string{
 	"fp.new_seat":               "New seat",
 	"fp.seat_label_hint":        "Enter a short label (e.g. A1, B12)",
 	"fp.seat_label_ph":          "Label (e.g. A1)",
-}
 
-// ---------- French ----------
+	// Forgot / reset password
+	"forgot.title":       "Forgot your password?",
+	"forgot.hint":        "Enter your email address and we'll send you a link to reset your password.",
+	"forgot.submit":      "Send reset link",
+	"forgot.sent":        "If an account with that address exists, a password reset link has been sent. Check your inbox.",
+	"forgot.back_login":  "Back to login",
+	"reset.title":        "Reset your password",
+	"reset.new_password": "New password",
+	"reset.confirm_password": "Confirm new password",
+	"reset.submit":       "Set new password",
+	"reset.done":         "Your password has been updated. You can now log in.",
+	"reset.request_new":  "Request a new link",
+	"reset.error.invalid_token":     "This link is invalid or has expired.",
+	"reset.error.fields_required":   "Both fields are required.",
+	"reset.error.passwords_mismatch":"Passwords do not match.",
+	"reset.error.server_error":      "An error occurred. Please try again.",
+	"login.forgot_password": "Forgot your password?",
+}
 var fr = map[string]string{
 	"nav.calendar":        "📅 Calendrier",
 	"nav.floorplans":      "🗺️ Plans",
@@ -625,9 +641,25 @@ var fr = map[string]string{
 	"fp.new_seat":               "Nouveau siège",
 	"fp.seat_label_hint":        "Saisissez un libellé court (ex: A1, B12)",
 	"fp.seat_label_ph":          "Libellé (ex: A1)",
-}
 
-// ---------- German ----------
+	// Mot de passe oublié / réinitialisation
+	"forgot.title":       "Mot de passe oublié ?",
+	"forgot.hint":        "Saisissez votre adresse email et nous vous enverrons un lien de réinitialisation.",
+	"forgot.submit":      "Envoyer le lien",
+	"forgot.sent":        "Si un compte correspond à cette adresse, un lien de réinitialisation a été envoyé. Vérifiez votre boîte mail.",
+	"forgot.back_login":  "Retour à la connexion",
+	"reset.title":        "Réinitialiser le mot de passe",
+	"reset.new_password": "Nouveau mot de passe",
+	"reset.confirm_password": "Confirmer le nouveau mot de passe",
+	"reset.submit":       "Définir le nouveau mot de passe",
+	"reset.done":         "Votre mot de passe a été mis à jour. Vous pouvez maintenant vous connecter.",
+	"reset.request_new":  "Demander un nouveau lien",
+	"reset.error.invalid_token":      "Ce lien est invalide ou a expiré.",
+	"reset.error.fields_required":    "Les deux champs sont obligatoires.",
+	"reset.error.passwords_mismatch": "Les mots de passe ne correspondent pas.",
+	"reset.error.server_error":       "Une erreur est survenue. Veuillez réessayer.",
+	"login.forgot_password": "Mot de passe oublié ?",
+}
 var de = map[string]string{
 	"nav.calendar":        "📅 Kalender",
 	"nav.floorplans":      "🗺️ Grundrisse",
@@ -905,9 +937,25 @@ var de = map[string]string{
 	"fp.new_seat":               "Neuer Platz",
 	"fp.seat_label_hint":        "Geben Sie eine kurze Bezeichnung ein (z.B. A1, B12)",
 	"fp.seat_label_ph":          "Bezeichnung (z.B. A1)",
-}
 
-// ---------- Spanish ----------
+	// Passwort vergessen / zurücksetzen
+	"forgot.title":       "Passwort vergessen?",
+	"forgot.hint":        "Geben Sie Ihre E-Mail-Adresse ein und wir senden Ihnen einen Link zum Zurücksetzen.",
+	"forgot.submit":      "Link senden",
+	"forgot.sent":        "Falls ein Konto mit dieser Adresse existiert, wurde ein Link gesendet. Prüfen Sie Ihren Posteingang.",
+	"forgot.back_login":  "Zurück zur Anmeldung",
+	"reset.title":        "Passwort zurücksetzen",
+	"reset.new_password": "Neues Passwort",
+	"reset.confirm_password": "Neues Passwort bestätigen",
+	"reset.submit":       "Passwort festlegen",
+	"reset.done":         "Ihr Passwort wurde aktualisiert. Sie können sich jetzt anmelden.",
+	"reset.request_new":  "Neuen Link anfordern",
+	"reset.error.invalid_token":      "Dieser Link ist ungültig oder abgelaufen.",
+	"reset.error.fields_required":    "Beide Felder sind erforderlich.",
+	"reset.error.passwords_mismatch": "Die Passwörter stimmen nicht überein.",
+	"reset.error.server_error":       "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",
+	"login.forgot_password": "Passwort vergessen?",
+}
 var es = map[string]string{
 	"nav.calendar":        "📅 Calendario",
 	"nav.floorplans":      "🗺️ Planos",
@@ -1185,9 +1233,25 @@ var es = map[string]string{
 	"fp.new_seat":               "Nuevo asiento",
 	"fp.seat_label_hint":        "Introduzca una etiqueta corta (ej: A1, B12)",
 	"fp.seat_label_ph":          "Etiqueta (ej: A1)",
-}
 
-// ---------- Italian ----------
+	// Contraseña olvidada / restablecer
+	"forgot.title":       "¿Olvidó su contraseña?",
+	"forgot.hint":        "Ingrese su dirección de correo y le enviaremos un enlace para restablecer su contraseña.",
+	"forgot.submit":      "Enviar enlace",
+	"forgot.sent":        "Si existe una cuenta con esa dirección, se ha enviado un enlace. Revise su bandeja de entrada.",
+	"forgot.back_login":  "Volver al inicio de sesión",
+	"reset.title":        "Restablecer contraseña",
+	"reset.new_password": "Nueva contraseña",
+	"reset.confirm_password": "Confirmar nueva contraseña",
+	"reset.submit":       "Establecer nueva contraseña",
+	"reset.done":         "Su contraseña ha sido actualizada. Ahora puede iniciar sesión.",
+	"reset.request_new":  "Solicitar un nuevo enlace",
+	"reset.error.invalid_token":      "Este enlace no es válido o ha expirado.",
+	"reset.error.fields_required":    "Ambos campos son obligatorios.",
+	"reset.error.passwords_mismatch": "Las contraseñas no coinciden.",
+	"reset.error.server_error":       "Ocurrió un error. Por favor, inténtelo de nuevo.",
+	"login.forgot_password": "¿Olvidó su contraseña?",
+}
 var it = map[string]string{
 	// Nav
 	"nav.calendar":        "📅 Calendario",
@@ -1477,4 +1541,22 @@ var it = map[string]string{
 	"fp.new_seat":               "Nuovo posto",
 	"fp.seat_label_hint":        "Inserisci un'etichetta breve (es. A1, B12)",
 	"fp.seat_label_ph":          "Etichetta (es. A1)",
+
+	// Password dimenticata / reimpostazione
+	"forgot.title":       "Password dimenticata?",
+	"forgot.hint":        "Inserisci il tuo indirizzo email e ti invieremo un link per reimpostare la password.",
+	"forgot.submit":      "Invia link",
+	"forgot.sent":        "Se esiste un account con quell'indirizzo, è stato inviato un link. Controlla la tua casella di posta.",
+	"forgot.back_login":  "Torna al login",
+	"reset.title":        "Reimposta la password",
+	"reset.new_password": "Nuova password",
+	"reset.confirm_password": "Conferma la nuova password",
+	"reset.submit":       "Imposta nuova password",
+	"reset.done":         "La tua password è stata aggiornata. Ora puoi accedere.",
+	"reset.request_new":  "Richiedi un nuovo link",
+	"reset.error.invalid_token":      "Questo link non è valido o è scaduto.",
+	"reset.error.fields_required":    "Entrambi i campi sono obbligatori.",
+	"reset.error.passwords_mismatch": "Le password non corrispondono.",
+	"reset.error.server_error":       "Si è verificato un errore. Riprova.",
+	"login.forgot_password": "Password dimenticata?",
 }
