@@ -25,6 +25,7 @@ function calendarApp(statuses, currentUserId, isAdmin, presences) {
         contextMenuUserId: null,
         pendingHalf: 'full',
         longPressTimer: null,
+        contextMenuForSelection: false,
 
         // Seat reservation modal state
         showSeatModal: false,
@@ -179,12 +180,14 @@ function calendarApp(statuses, currentUserId, isAdmin, presences) {
             this.showPicker = false;
             this.showContextMenu = false;
             this.pendingHalf = 'full';
+            this.contextMenuForSelection = false;
         },
 
         // Open right-click context menu for half-day selection
         openContextMenu(userId, date, event) {
             if (!this.isAdmin && userId !== this.currentUserId) return;
             if (this.isCellBlocked(userId, date)) return;
+            this.contextMenuForSelection = false;
             this.showContextMenu = true;
             this.showPicker = false;
             this.contextMenuDate = date;
@@ -197,8 +200,14 @@ function calendarApp(statuses, currentUserId, isAdmin, presences) {
         selectHalf(half) {
             this.pendingHalf = half;
             this.showContextMenu = false;
-            this.selectedUserId = this.contextMenuUserId;
-            this.selectedDates = [this.contextMenuDate];
+            if (this.contextMenuForSelection && this.selectedDates.length > 0) {
+                // Preserve multi-cell drag selection
+                this.selectedUserId = this.contextMenuUserId;
+            } else {
+                this.selectedUserId = this.contextMenuUserId;
+                this.selectedDates = [this.contextMenuDate];
+            }
+            this.contextMenuForSelection = false;
             this.pickerX = this.contextMenuX;
             this.pickerY = this.contextMenuY;
             this.showPicker = true;
@@ -414,13 +423,27 @@ function calendarApp(statuses, currentUserId, isAdmin, presences) {
                     this.longPressTimer = null;
                 }
                 if (this.selecting && this.selectedDates.length > 0) {
-                    this.showPicker = true;
-                    
                     const touch = e.changedTouches[0];
-                    this.pickerX = Math.min(touch.clientX + 10, window.innerWidth - 280);
-                    this.pickerY = Math.min(touch.clientY - 200, window.innerHeight - 400);
-                    if (this.pickerY < 10) this.pickerY = 10;
-                    
+                    const x = Math.min(touch.clientX + 10, window.innerWidth - 220);
+                    const y = Math.max(10, Math.min(touch.clientY - 10, window.innerHeight - 300));
+
+                    if (this.selectedDates.length > 1) {
+                        // Multi-cell drag: show context menu to choose AM/PM/full first
+                        this.contextMenuForSelection = true;
+                        this.contextMenuUserId = this.selectedUserId;
+                        this.contextMenuDate = this.selectedDates[this.selectedDates.length - 1];
+                        this.contextMenuX = x;
+                        this.contextMenuY = y;
+                        this.showContextMenu = true;
+                        this.showPicker = false;
+                    } else {
+                        // Single cell: show picker directly
+                        this.showPicker = true;
+                        this.pickerX = Math.min(touch.clientX + 10, window.innerWidth - 280);
+                        this.pickerY = Math.min(touch.clientY - 200, window.innerHeight - 400);
+                        if (this.pickerY < 10) this.pickerY = 10;
+                    }
+
                     this.selecting = false;
                 }
             });

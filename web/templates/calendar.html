@@ -149,7 +149,7 @@
 
     <!-- Right-click context menu for half-day selection -->
     <div x-show="showContextMenu"
-         @click.away="showContextMenu = false"
+         @click.away="cancelSelect()"
          class="fixed z-[60] bg-white rounded-xl shadow-2xl border border-gray-200 p-1.5 min-w-[200px]"
          :style="'top: ' + contextMenuY + 'px; left: ' + contextMenuX + 'px'">
         <div class="text-[10px] font-semibold text-gray-400 uppercase px-2 py-1" x-text="_t['cal.choose_period']"></div>
@@ -165,7 +165,7 @@
                 class="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg hover:bg-gray-100 text-gray-700 transition">
             <span x-text="_t['cal.afternoon']"></span>
         </button>
-        <template x-if="hasPresence(contextMenuDate)">
+        <template x-if="hasPresence(contextMenuDate) && !(contextMenuForSelection && selectedDates.length > 1)">
             <div>
                 <hr class="my-1 border-gray-100">
                 <button @click="addToCalendar(contextMenuDate)"
@@ -188,7 +188,7 @@
         {{else}}
         <hr class="my-1 border-gray-100">
         {{end}}
-        <button @click="clearDay()"
+        <button @click="contextMenuForSelection && selectedDates.length > 1 ? clearStatus() : clearDay()"
                 class="w-full flex items-center gap-2 px-3 py-2 text-sm rounded-lg text-red-600 hover:bg-red-50 transition">
             <span x-text="_t['cal.clear_day']"></span>
         </button>

@@ -21,7 +21,7 @@ A web application for managing employee presence and absences, built with Go and
 - **Customizable statuses**: color, label, billable flag (€)
 - **Public holidays**: displayed in grey on the calendar, with an optional imputation flag
 - **Role management**: granular per-user permissions
-- **SAML 2.0 SSO**: Microsoft Entra ID (Azure AD) integration with automatic user provisioning
+- **SAML 2.0 SSO**: IDP integration with automatic user provisioning
 - **REST API with Personal Access Tokens**: every feature is accessible via authenticated HTTP requests; users generate tokens with a chosen description and expiry; tokens carry no more permissions than the issuing user
 - **Multilingual UI**: full interface available in English 🇺🇸, French 🇫🇷, German 🇩🇪, Spanish 🇪🇸, and Italian 🇮🇹; language preference stored in a cookie
 
@@ -84,12 +84,12 @@ All options are set via environment variables in `docker-compose.yml`.
 
 > The local admin account always has the `global` role. Change these values in production.
 
-### SAML 2.0 SSO (Microsoft Entra ID)
+### SAML 2.0 SSO
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `SAML_IDP_METADATA_URL` | Yes | IdP metadata URL from Entra ID |
-| `SAML_ENTITY_ID` | Yes | Service Provider Entity ID (must match the Entra ID app config) |
+| `SAML_IDP_METADATA_URL` | Yes | IdP metadata URL |
+| `SAML_ENTITY_ID` | Yes | Service Provider Entity ID |
 | `SAML_ROOT_URL` | Yes | Public application URL (e.g. `https://presence.example.com`) |
 | `SAML_SP_CERT_FILE` | No | Path to the SP certificate (auto-generated if not provided) |
 | `SAML_SP_KEY_FILE` | No | Path to the SP private key |
