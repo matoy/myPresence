@@ -13,7 +13,7 @@
             </svg>
         </a>
         <h2 class="text-xl sm:text-2xl font-bold text-gray-800 min-w-[200px] text-center">
-            {{.MonthName}} {{.Year}}
+            {{index $.T (printf "cal.month.%d" .Month)}} {{.Year}}
         </h2>
         <a href="/?year={{.NextYear}}&month={{.NextMonth}}"
            class="p-2 rounded-lg bg-white shadow hover:bg-gray-50 transition">
@@ -46,7 +46,7 @@
                     <th class="px-0 py-2 text-center text-xs font-medium border-b border-gray-200
                         {{if or .IsWeekend .IsHoliday}}bg-gray-100 text-gray-400{{else}}text-gray-500{{end}}"
                         {{if .IsHoliday}}title="{{.HolidayName}}"{{end}}>
-                        <div>{{.DayName}}</div>
+                        <div>{{index $.T (printf "cal.day.%d" .DayIndex)}}</div>
                         <div class="font-bold {{if or .IsWeekend .IsHoliday}}text-gray-400{{else}}text-gray-700{{end}}">{{.Day}}</div>
                         {{if .IsHoliday}}<div class="text-[9px] text-amber-500 leading-none truncate px-0.5">🎌</div>{{end}}
                     </th>

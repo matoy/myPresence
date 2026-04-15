@@ -12,12 +12,8 @@ import (
 	"presence-app/internal/models"
 )
 
-var frenchMonths = [...]string{
-	"", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
-	"Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
-}
-
-var frenchDays = [...]string{"Dim", "Lun", "Mar", "Mer", "Jeu", "Ven", "Sam"}
+// Month and day names are resolved at template render time via the i18n T map
+// using the keys "cal.month.N" (1-12) and "cal.day.N" (0-6, Sunday=0).
 
 // CalendarHandler handles the main calendar view.
 type CalendarHandler struct {
@@ -93,7 +89,6 @@ func (h *CalendarHandler) CalendarPage(w http.ResponseWriter, r *http.Request) {
 	h.Render(w, r, "calendar", map[string]interface{}{
 		"Year":             year,
 		"Month":            month,
-		"MonthName":        frenchMonths[month],
 		"PrevYear":         prevTime.Year(),
 		"PrevMonth":        int(prevTime.Month()),
 		"NextYear":         nextTime.Year(),
@@ -224,7 +219,7 @@ func getDaysInMonth(year, month int) []models.DayInfo {
 		days = append(days, models.DayInfo{
 			Day:       d,
 			Date:      t.Format("2006-01-02"),
-			DayName:   frenchDays[t.Weekday()],
+			DayIndex:  int(t.Weekday()),
 			IsWeekend: t.Weekday() == time.Saturday || t.Weekday() == time.Sunday,
 		})
 	}

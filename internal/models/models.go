@@ -151,7 +151,8 @@ type CalendarUser struct {
 type DayInfo struct {
 	Day                 int
 	Date                string // YYYY-MM-DD
-	DayName             string // Mon, Tue, etc.
+	DayName             string // short day name (legacy, kept for compatibility)
+	DayIndex            int    // weekday index: 0=Sunday … 6=Saturday
 	IsWeekend           bool
 	IsHoliday           bool
 	HolidayName         string

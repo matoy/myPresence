@@ -23,6 +23,7 @@ A web application for managing employee presence and absences, built with Go and
 - **Role management**: granular per-user permissions
 - **SAML 2.0 SSO**: Microsoft Entra ID (Azure AD) integration with automatic user provisioning
 - **REST API with Personal Access Tokens**: every feature is accessible via authenticated HTTP requests; users generate tokens with a chosen description and expiry; tokens carry no more permissions than the issuing user
+- **Multilingual UI**: full interface available in English 🇺🇸, French 🇫🇷, German 🇩🇪, Spanish 🇪🇸, and Italian 🇮🇹; language preference stored in a cookie
 
 ---
 
@@ -154,7 +155,7 @@ myPresence exposes a full REST API that mirrors every user action available in t
 
 Each user can generate tokens at **🔑 `/settings/tokens`** (accessible from the top-right menu).
 
-- Choose a **description** (e.g. *"Script de reporting"*) and an **expiry** (7, 30, 90, 365 days, or no expiry)
+- Choose a **description** (e.g. *"Reporting script"*) and an **expiry** (7, 30, 90, 365 days, or no expiry)
 - The raw token (prefixed `mpa_`) is shown **once** — copy it before closing the dialog
 - Tokens inherit **exactly** the permissions of the issuing user — no elevation, no restriction
 - Revocation is immediate; all integrations using the token stop working instantly
@@ -204,11 +205,11 @@ The floor plan feature allows administrators to set up interactive office maps s
 
 - Navigate to **🗺️ Plans** to see the floor map for any date.
   - Use the **← / →** arrows to navigate day by day.
-  - Switch between **Matin / Journée / Après-midi** to scope the reservation to a half-day.
+  - Switch between **Morning / Full day / Afternoon** to scope the reservation to a half-day.
   - **Green** = free — click to book. **Blue** = your own reservation — click to cancel. **Red** = taken.
 - From the **calendar**, seat icons (🪑) appear on days where you have a reservation.
-  - **Right-click** one or more selected days → *Réserver un siège* to bulk-book a desk.
-  - **Right-click** → *Annuler réservation siège* to remove all your reservations on the selected days.
+  - **Right-click** one or more selected days → *Reserve a desk* to bulk-book a desk.
+  - **Right-click** → *Cancel desk reservation* to remove all your reservations on the selected days.
 
 ### Rules
 
@@ -243,13 +244,13 @@ Automatically seeded on first startup:
 
 | Name | Color | Billable | On-site |
 |------|-------|----------|---------|
-| Présent sur site | 🟢 green | Yes | Yes |
-| Télétravail | 🟣 purple | Yes | No |
-| Déplacement | 🔵 blue | Yes | Yes |
-| Congé | 🟠 orange | No | No |
-| Maladie | 🔴 red | No | No |
-| Formation | 🟡 yellow | No | No |
-| Absence | ⚫ grey | No | No |
+| On site | 🟢 green | Yes | Yes |
+| Remote work | 🟣 purple | Yes | No |
+| Business trip | 🔵 blue | Yes | Yes |
+| Leave | 🟠 orange | No | No |
+| Sick leave | 🔴 red | No | No |
+| Training | 🟡 yellow | No | No |
+| Absent | ⚫ grey | No | No |
 
 All statuses are fully editable from `/admin/statuses`. The **On-site** flag determines whether a desk reservation is allowed for that day.
 

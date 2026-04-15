@@ -142,19 +142,17 @@
                             <div class="border-t border-gray-100 my-1"></div>
                             <div class="px-4 py-1.5">
                                 <p class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1.5">{{index .T "nav.language"}}</p>
-                                <div class="flex gap-1 flex-wrap">
-                                    {{$currentLang := .Lang}}
-                                    {{range .SupportedLangs}}
-                                    <form method="POST" action="/set-lang" class="inline">
-                                        <input type="hidden" name="lang" value="{{.Code}}">
-                                        <button type="submit"
-                                                class="text-xs px-2 py-1 rounded-lg transition font-medium border {{if eq .Code $currentLang}}bg-primary text-white border-primary{{else}}bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200{{end}}"
-                                                title="{{.Label}}">
-                                            {{.Flag}} {{.Code | upper}}
-                                        </button>
-                                    </form>
-                                    {{end}}
-                                </div>
+                                <form method="POST" action="/set-lang">
+                                    <select name="lang" onchange="this.form.submit()"
+                                            class="w-full text-sm rounded-lg border border-gray-200 bg-gray-50 text-gray-700 px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-primary cursor-pointer">
+                                        {{$currentLang := .Lang}}
+                                        {{range .SupportedLangs}}
+                                        <option value="{{.Code}}" {{if eq .Code $currentLang}}selected{{end}}>
+                                            {{.Flag}} {{.Label}}
+                                        </option>
+                                        {{end}}
+                                    </select>
+                                </form>
                             </div>
                             <div class="border-t border-gray-100 my-1"></div>
                             <a href="/logout"

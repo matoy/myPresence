@@ -54,6 +54,9 @@ func main() {
 	funcMap := template.FuncMap{
 		"add": func(a, b int) int { return a + b },
 		"sub": func(a, b int) int { return a - b },
+		// safehtml marks a string as safe HTML so html/template does not escape it.
+		// Only use with strings originating from our own controlled i18n data.
+		"safehtml": func(s string) template.HTML { return template.HTML(s) }, //nolint:gosec
 		"seq": func(n int) []int {
 			s := make([]int, n)
 			for i := range s {

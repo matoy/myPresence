@@ -170,7 +170,7 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 		"SelectedTeamID":   teamID,
 		"Year":             year,
 		"Month":            month,
-		"MonthName":        frenchMonths[month],
+
 		"ViewMode":         viewMode,
 		"TotalBillable":    totalBillable,
 		"TotalNotSet":      totalNotSet,

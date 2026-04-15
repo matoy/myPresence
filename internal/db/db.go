@@ -442,13 +442,13 @@ billable bool
 onSite   bool
 order    int
 }{
-{"Présent sur site", "#22c55e", true, true, 1},
-{"Télétravail", "#a855f7", true, false, 2},
-{"Déplacement", "#3b82f6", true, true, 3},
-{"Congé", "#f97316", false, false, 4},
-{"Maladie", "#ef4444", false, false, 5},
-{"Formation", "#eab308", false, false, 6},
-{"Absence", "#85888e", false, false, 7},
+{"On site", "#22c55e", true, true, 1},
+{"Remote work", "#a855f7", true, false, 2},
+{"Business trip", "#3b82f6", true, true, 3},
+{"Leave", "#f97316", false, false, 4},
+{"Sick leave", "#ef4444", false, false, 5},
+{"Training", "#eab308", false, false, 6},
+{"Absent", "#85888e", false, false, 7},
 }
 for _, s := range defaults {
 _, err := d.presence.Exec(

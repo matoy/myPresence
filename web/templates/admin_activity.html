@@ -15,7 +15,7 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
                 </svg>
             </a>
-            <span class="text-lg font-semibold text-gray-800 min-w-[180px] text-center">{{.MonthName}} {{.Year}}</span>
+            <span class="text-lg font-semibold text-gray-800 min-w-[180px] text-center">{{index $.T (printf "cal.month.%d" .Month)}} {{.Year}}</span>
             <a href="/admin/activity?year={{.NextYear}}&month={{.NextMonth}}{{if .SelectedTeamID}}&team={{.SelectedTeamID}}{{end}}"
                class="p-2 rounded-lg bg-gray-100 hover:bg-gray-200 transition">
                 <svg class="h-4 w-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -54,7 +54,7 @@
     <!-- Summary Stats Table -->
     <div class="flex items-center justify-between mb-3">
         <h2 class="text-lg font-semibold text-gray-800">{{index $.T "activity.summary"}}</h2>
-        <button onclick="exportTable('summary-table', 'recap_{{.MonthName}}_{{.Year}}')" class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 shadow-sm transition">
+        <button onclick="exportTable('summary-table', 'recap_{{index $.T (printf `cal.month.%d` .Month)}}_{{.Year}}')" class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 shadow-sm transition">
             {{index $.T "admin.export"}}
         </button>
     </div>
@@ -190,7 +190,7 @@
     <!-- Daily Breakdown Table -->
     <div class="flex items-center justify-between mb-3">
         <h2 class="text-lg font-semibold text-gray-800">{{index $.T "activity.daily"}}</h2>
-        <button onclick="exportTable('daily-table', 'daily_{{.MonthName}}_{{.Year}}')" class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 shadow-sm transition">
+        <button onclick="exportTable('daily-table', 'daily_{{index $.T (printf `cal.month.%d` .Month)}}_{{.Year}}')" class="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 shadow-sm transition">
             {{index $.T "admin.export"}}
         </button>
     </div>
@@ -203,7 +203,7 @@
                     </th>
                     {{range $days}}
                     <th class="px-1 py-2 text-center text-[10px] font-medium border-b border-gray-200 min-w-[32px] {{if or .IsWeekend .IsHoliday}}bg-gray-200 text-gray-400{{else}}text-gray-500{{end}}">
-                        <div>{{.DayName}}</div>
+                        <div>{{index $.T (printf "cal.day.%d" .DayIndex)}}</div>
                         <div class="font-bold">{{.Day}}</div>
                     </th>
                     {{end}}
