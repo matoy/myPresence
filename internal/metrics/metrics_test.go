@@ -13,6 +13,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
+	dto "github.com/prometheus/client_model/go"
 )
 
 // ── normalizePath ─────────────────────────────────────────────────────────────
@@ -125,19 +126,16 @@ func TestInstrument_NormalizesNumericSegments(t *testing.T) {
 }
 
 func TestInstrument_RecordsDurationHistogram(t *testing.T) {
-	// Each handled request must produce at least one histogram observation.
-	// We verify by checking that the histogram _count sample increases.
 	path := "/test-duration"
-	// HTTPRequestDuration is a HistogramVec; WithLabelValues returns an Observer.
-	// testutil.ToFloat64 on a Histogram returns the sum — any successful call
-	// to ServeHTTP is enough to prove an observation was recorded.
-	before := testutil.ToFloat64(HTTPRequestDuration.WithLabelValues("GET", path))
 	req := httptest.NewRequest(http.MethodGet, path, nil)
 	Instrument(handlerCode(http.StatusOK)).ServeHTTP(httptest.NewRecorder(), req)
-	after := testutil.ToFloat64(HTTPRequestDuration.WithLabelValues("GET", path))
-	// The sum (returned by ToFloat64 for a histogram) must be ≥ 0 and have changed.
-	if after < before {
-		t.Errorf("histogram sum decreased: before=%v after=%v", before, after)
+
+	// Gather from the default registry and locate the histogram sample count
+	// for our specific label pair. ToFloat64 cannot be used on a HistogramVec
+	// because it returns a prometheus.Observer, not a prometheus.Collector.
+	count := histogramSampleCount(t, "mypresence_http_request_duration_seconds", "GET", path)
+	if count == 0 {
+		t.Error("expected at least one histogram observation for request duration, got 0")
 	}
 }
 
@@ -299,4 +297,43 @@ mypresence_db_users_total 3.5
 `), "mypresence_db_users_total"); err != nil {
 		t.Error(err)
 	}
+}
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
+// histogramSampleCount returns the _count value for a named histogram metric
+// matching the given method and path labels, gathering from the default registry.
+func histogramSampleCount(t *testing.T, metricName, method, path string) uint64 {
+	t.Helper()
+	mfs, err := prometheus.DefaultGatherer.Gather()
+	if err != nil {
+		t.Fatalf("gather: %v", err)
+	}
+	for _, mf := range mfs {
+		if mf.GetName() != metricName {
+			continue
+		}
+		for _, m := range mf.GetMetric() {
+			if labelsMatch(m, map[string]string{"method": method, "path": path}) {
+				if h := m.GetHistogram(); h != nil {
+					return h.GetSampleCount()
+				}
+			}
+		}
+	}
+	return 0
+}
+
+// labelsMatch reports whether all entries in want are present in m's label pairs.
+func labelsMatch(m *dto.Metric, want map[string]string) bool {
+	got := make(map[string]string, len(m.GetLabel()))
+	for _, lp := range m.GetLabel() {
+		got[lp.GetName()] = lp.GetValue()
+	}
+	for k, v := range want {
+		if got[k] != v {
+			return false
+		}
+	}
+	return true
 }
