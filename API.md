@@ -262,7 +262,7 @@ Dates where the caller has no on-site presence are silently skipped.
 
 **Response 200**
 ```json
-{ "reserved": 2 }
+{ "booked": 2 }
 ```
 
 #### `DELETE /api/reservations/bulk`
@@ -311,14 +311,238 @@ List all users.
 ```
 
 #### `PUT /api/users/{id}/roles`
-Update roles for a user. Roles is a comma-separated string.
+Update roles for a user.
 
 Valid roles: `basic`, `team_manager`, `team_leader`, `status_manager`, `activity_viewer`, `floorplan_manager`, `global`.
 
+**Request** — roles as a JSON array:
+```json
+{ "roles": ["basic", "activity_viewer"] }
+```
+
+**Response 200**
+```json
+{ "status": "ok" }
+```
+
+---
+
+### Local Users Admin _(requires `global` role)_
+
+#### `POST /admin/users`
+Create a new local (password-based) user account.
+
 **Request**
 ```json
-{ "roles": "basic,activity_viewer" }
+{ "email": "alice@example.com", "name": "Alice Martin", "password": "secret" }
 ```
+
+**Response 200**
+```json
+{ "id": 2, "status": "ok" }
+```
+**Error 400** — missing fields  
+**Error 409** — email already in use
+
+#### `PUT /admin/users/{id}`
+Update a user's email and display name.
+
+**Request**
+```json
+{ "email": "alice@example.com", "name": "Alice Martin" }
+```
+
+**Response 200**
+```json
+{ "status": "ok" }
+```
+
+#### `PUT /admin/users/{id}/password`
+Change the password of a local account.
+
+**Request**
+```json
+{ "password": "newpassword" }
+```
+
+**Response 200**
+```json
+{ "status": "ok" }
+```
+
+#### `PUT /admin/users/{id}/disabled`
+Enable or disable a user account. Cannot be applied to your own account.
+
+**Request**
+```json
+{ "disabled": true }
+```
+
+**Response 200**
+```json
+{ "status": "ok" }
+```
+
+#### `DELETE /admin/users/{id}`
+Permanently delete a user account. Cannot delete your own account.
+
+**Response 200**
+```json
+{ "status": "ok" }
+```
+
+---
+
+### Teams _(requires `team_manager`, `team_leader`, or `global`)_
+
+#### `GET /api/teams`
+List all teams. `team_leader` users see all teams (same scope as `team_manager`).
+
+**Response 200**
+```json
+[
+  {
+    "id": 1,
+    "name": "Engineering",
+    "created_at": "2026-01-15T09:00:00Z"
+  }
+]
+```
+
+#### `POST /admin/teams`
+Create a new team. Requires `team_manager` or `global`.
+
+**Request**
+```json
+{ "name": "Engineering" }
+```
+
+**Response 200**
+```json
+{ "id": 1, "status": "ok" }
+```
+
+**Error 400** — name missing or blank  
+**Error 500** — name already exists (unique constraint)
+
+#### `PUT /admin/teams/{id}`
+Rename a team. Requires `team_manager` or `global`.
+
+**Request**
+```json
+{ "name": "Platform Engineering" }
+```
+
+**Response 200**
+```json
+{ "status": "ok" }
+```
+
+#### `DELETE /admin/teams/{id}`
+Delete a team and all its memberships. Requires `team_manager` or `global`.
+
+**Response 200**
+```json
+{ "status": "ok" }
+```
+
+#### `POST /admin/teams/{id}/members`
+Add a user to a team. Requires `team_manager`, `global`, or `team_leader` (own teams only).
+
+**Request**
+```json
+{ "user_id": 5 }
+```
+
+**Response 200**
+```json
+{ "status": "ok" }
+```
+
+#### `DELETE /admin/teams/{id}/members/{userId}`
+Remove a user from a team. Same role requirements as adding a member.
+
+**Response 200**
+```json
+{ "status": "ok" }
+```
+
+---
+
+### Holidays Admin _(requires `global` role)_
+
+#### `POST /admin/holidays`
+Create a public holiday.
+
+**Request**
+```json
+{ "date": "2026-07-14", "name": "Bastille Day", "allow_imputed": false }
+```
+`allow_imputed` — when `true`, employees can log chargeable time on this day.
+
+**Response 200**
+```json
+{ "id": 5, "status": "ok" }
+```
+**Error 400** — missing date or name  
+**Error 409** — date already exists
+
+#### `PUT /admin/holidays/{id}`
+Update an existing holiday.
+
+**Request**
+```json
+{ "date": "2026-07-14", "name": "Bastille Day", "allow_imputed": false }
+```
+
+**Response 200**
+```json
+{ "status": "ok" }
+```
+
+#### `DELETE /admin/holidays/{id}`
+Delete a holiday.
+
+**Response 200**
+```json
+{ "status": "ok" }
+```
+
+---
+
+### Statuses Admin _(requires `global` or `status_manager` role)_
+
+Statuses represent presence types (e.g. On site, Remote, Leave). Seven defaults are seeded on first launch.
+
+#### `POST /admin/statuses`
+Create a new status.
+
+**Request**
+```json
+{ "name": "On site", "color": "#22c55e", "billable": true, "on_site": true, "sort_order": 1 }
+```
+
+**Response 200**
+```json
+{ "id": 8, "status": "ok" }
+```
+**Error 400** — missing name or color
+
+#### `PUT /admin/statuses/{id}`
+Update an existing status.
+
+**Request**
+```json
+{ "name": "On site", "color": "#22c55e", "billable": true, "on_site": true, "sort_order": 1 }
+```
+
+**Response 200**
+```json
+{ "status": "ok" }
+```
+
+#### `DELETE /admin/statuses/{id}`
+Delete a status. Existing presences that reference this status are **not** automatically removed.
 
 **Response 200**
 ```json
@@ -358,10 +582,86 @@ Returns presence statistics for a team over a month.
 
 ### Floor Plan Admin _(requires `floorplan_manager` role)_
 
-#### `GET /api/admin/seats?floorplan_id=`
-List all seats for a floor plan (admin view, used by the editor).
+#### `POST /admin/floorplans`
+Create a new floor plan.
 
-**Response 200**: array of `Seat` objects (same as `/api/floorplans/{id}/seats`).
+**Request**
+```json
+{ "name": "HQ Open Space" }
+```
+
+**Response 200**
+```json
+{ "id": 1, "name": "HQ Open Space" }
+```
+
+#### `PUT /admin/floorplans/{id}`
+Rename a floor plan or change its display order.
+
+**Request**
+```json
+{ "name": "HQ 3rd Floor", "sort_order": 0 }
+```
+
+**Response 200**
+```json
+{ "status": "ok" }
+```
+
+#### `DELETE /admin/floorplans/{id}`
+Delete a floor plan and all its seats. The associated background image file is also removed.
+
+**Response 200**
+```json
+{ "status": "ok" }
+```
+
+#### `POST /admin/floorplans/{id}/image`
+Upload a background image for a floor plan. Uses `multipart/form-data` with the file in the `image` field. Accepted formats: PNG, JPG, GIF, WEBP (max 10 MB).
+
+**Response 200**
+```json
+{ "status": "ok", "image_path": "floorplan_1.png" }
+```
+
+#### `POST /admin/floorplans/{id}/seats`
+Add a seat to a floor plan. Coordinates are expressed as percentages (0–100) of the image dimensions.
+
+**Request**
+```json
+{ "label": "A1", "x_pct": 20.5, "y_pct": 35.0 }
+```
+
+**Response 200**
+```json
+{ "id": 12, "label": "A1", "x_pct": 20.5, "y_pct": 35.0 }
+```
+
+#### `PUT /admin/seats/{id}`
+Update a seat's label or position.
+
+**Request**
+```json
+{ "label": "A1", "x_pct": 22.0, "y_pct": 35.0 }
+```
+
+**Response 200**
+```json
+{ "status": "ok" }
+```
+
+#### `DELETE /admin/seats/{id}`
+Delete a seat. Any reservations on that seat are cascade-deleted.
+
+**Response 200**
+```json
+{ "status": "ok" }
+```
+
+#### `GET /api/admin/seats?floorplan_id=`
+List all seats for a floor plan (full admin view, without booking status).
+
+**Response 200**: array of `Seat` objects (same schema as `/api/floorplans/{id}/seats`).
 
 ---
 

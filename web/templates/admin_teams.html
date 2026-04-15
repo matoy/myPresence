@@ -11,14 +11,16 @@
     {{if $canManageTeams}}
     <div class="bg-white rounded-xl shadow-md p-6 mb-6">
         <h2 class="text-lg font-semibold text-gray-800 mb-3">{{index $.T "teams.create"}}</h2>
-        <form method="POST" action="/admin/teams" class="flex gap-3">
-            <input type="text" name="name" placeholder="{{index $.T "teams.team_name"}}" required
+        <div class="flex gap-3">
+            <input type="text" x-model="newTeamName"
+                   placeholder="{{index $.T "teams.team_name"}}" 
+                   @keydown.enter="createTeam()"
                    class="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/50 focus:border-primary">
-            <button type="submit"
+            <button @click="createTeam()"
                     class="px-6 py-2 bg-primary text-white rounded-lg font-medium hover:opacity-90 transition">
                 {{index $.T "admin.create"}}
             </button>
-        </form>
+        </div>
     </div>
     {{end}}
 

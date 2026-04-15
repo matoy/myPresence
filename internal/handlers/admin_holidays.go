@@ -31,30 +31,29 @@ func (h *HolidaysHandler) HolidaysPage(w http.ResponseWriter, r *http.Request) {
 
 // CreateHoliday handles POST /admin/holidays.
 func (h *HolidaysHandler) CreateHoliday(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/admin/holidays?error=Requête+invalide", http.StatusSeeOther)
+	var req struct {
+		Date         string `json:"date"`
+		Name         string `json:"name"`
+		AllowImputed bool   `json:"allow_imputed"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
-
-	date := r.FormValue("date")
-	name := r.FormValue("name")
-	allowImputed := r.FormValue("allow_imputed") == "on"
-
-	if date == "" || name == "" {
-		http.Redirect(w, r, "/admin/holidays?error=Date+et+nom+requis", http.StatusSeeOther)
+	if req.Date == "" || req.Name == "" {
+		jsonError(w, "Date and name are required", http.StatusBadRequest)
 		return
 	}
-
-	if err := h.DB.CreateHoliday(date, name, allowImputed); err != nil {
-		http.Redirect(w, r, "/admin/holidays?error=Date+déjà+existante+ou+erreur+serveur", http.StatusSeeOther)
+	id, err := h.DB.CreateHoliday(req.Date, req.Name, req.AllowImputed)
+	if err != nil {
+		jsonError(w, "Date already exists or server error", http.StatusConflict)
 		return
 	}
-
 	currentUser := middleware.GetUser(r)
 	if currentUser != nil {
-		h.DB.LogAdminAction(currentUser.ID, "holiday", 0, "create", date+" "+name)
+		h.DB.LogAdminAction(currentUser.ID, "holiday", id, "create", req.Date+" "+req.Name)
 	}
-	http.Redirect(w, r, "/admin/holidays", http.StatusSeeOther)
+	jsonOK(w, map[string]interface{}{"id": id, "status": "ok"})
 }
 
 // UpdateHoliday handles PUT /admin/holidays/{id}.

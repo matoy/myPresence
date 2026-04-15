@@ -8,37 +8,39 @@
     <!-- Create Status Form -->
     <div class="bg-white rounded-xl shadow-md p-6 mb-6">
         <h2 class="text-lg font-semibold text-gray-800 mb-3">{{index $.T "statuses.add"}}</h2>
-        <form method="POST" action="/admin/statuses" class="flex flex-wrap gap-3 items-end">
+        <div class="flex flex-wrap gap-3 items-end">
             <div class="flex-1 min-w-[200px]">
                 <label class="block text-xs font-medium text-gray-500 mb-1">{{index $.T "admin.name"}}</label>
-                <input type="text" name="name" placeholder="{{index $.T "statuses.name_placeholder"}}" required
-                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/50">
+                <input type="text" x-model="newName" placeholder="{{index $.T "statuses.name_placeholder"}}"
+                       class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/50"
+                       @keydown.enter="createStatus()">
             </div>
             <div class="w-24">
                 <label class="block text-xs font-medium text-gray-500 mb-1">{{index $.T "admin.color"}}</label>
-                <input type="color" name="color" value="#3b82f6"
+                <input type="color" x-model="newColor"
                        class="w-full h-10 rounded-lg border border-gray-300 cursor-pointer">
             </div>
             <div class="w-20">
                 <label class="block text-xs font-medium text-gray-500 mb-1">{{index $.T "admin.order"}}</label>
-                <input type="number" name="sort_order" value="0"
+                <input type="number" x-model.number="newOrder"
                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/50">
             </div>
             <div class="flex items-center gap-2 py-2">
-                <input type="checkbox" name="billable" id="billable"
+                <input type="checkbox" x-model="newBillable" id="billable"
                        class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary">
                 <label for="billable" class="text-sm font-medium text-gray-700">{{index $.T "statuses.billable"}}</label>
             </div>
             <div class="flex items-center gap-2 py-2">
-                <input type="checkbox" name="on_site" id="on_site"
+                <input type="checkbox" x-model="newOnSite" id="on_site"
                        class="h-4 w-4 text-primary rounded border-gray-300 focus:ring-primary">
                 <label for="on_site" class="text-sm font-medium text-gray-700">{{index $.T "statuses.on_site"}}</label>
             </div>
-            <button type="submit"
+            <button @click="createStatus()"
                     class="px-6 py-2 bg-primary text-white rounded-lg font-medium hover:opacity-90 transition">
                 {{index $.T "admin.add"}}
             </button>
-        </form>
+        </div>
+        <p x-show="createError" x-text="createError" class="mt-2 text-sm text-red-600"></p>
     </div>
 
     <!-- Statuses List -->

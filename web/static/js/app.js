@@ -436,6 +436,18 @@ function calendarApp(statuses, currentUserId, isAdmin, presences) {
 // ============================================================
 function teamsAdmin() {
     return {
+        newTeamName: '',
+
+        async createTeam() {
+            if (!this.newTeamName.trim()) return;
+            const r = await fetch('/admin/teams', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: this.newTeamName.trim() })
+            });
+            if (r.ok) window.location.reload();
+        },
+
         async renameTeam(id, name) {
             await fetch(`/admin/teams/${id}`, {
                 method: 'PUT',
@@ -472,6 +484,25 @@ function teamsAdmin() {
 // ============================================================
 function statusAdmin() {
     return {
+        newName: '',
+        newColor: '#3b82f6',
+        newOrder: 0,
+        newBillable: false,
+        newOnSite: false,
+        createError: '',
+
+        async createStatus() {
+            this.createError = '';
+            if (!this.newName || !this.newColor) { this.createError = 'Name and color are required'; return; }
+            const resp = await fetch('/admin/statuses', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: this.newName, color: this.newColor, sort_order: this.newOrder, billable: this.newBillable, on_site: this.newOnSite })
+            });
+            if (resp.ok) { window.location.reload(); }
+            else { const d = await resp.json(); this.createError = d.error || 'Error'; }
+        },
+
         async updateStatus(id, name, color, billable, onSite, sortOrder) {
             await fetch(`/admin/statuses/${id}`, {
                 method: 'PUT',

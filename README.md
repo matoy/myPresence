@@ -346,3 +346,31 @@ Templates and static files are embedded (`//go:embed`) into the binary at build 
 ```bash
 docker compose down && docker compose up -d --build
 ```
+
+---
+
+## Screenshots
+
+### Login
+![Login page](docs/screenshots/01-login.png)
+
+### Personal Calendar (April 2026)
+![Calendar with presence data](docs/screenshots/02-calendar.png)
+
+### Activity Report
+![Activity report for Engineering team](docs/screenshots/07-activity.png)
+
+### Teams
+![Teams management](docs/screenshots/05-teams.png)
+
+### Users & Roles
+![Users and roles management](docs/screenshots/04-users.png)
+
+### Statuses
+![Status configuration](docs/screenshots/03-statuses.png)
+
+### Public Holidays
+![Holidays configuration](docs/screenshots/06-holidays.png)
+
+### Floor Plans
+![Floor plan with seat reservations](docs/screenshots/08-floorplan.png)

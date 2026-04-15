@@ -686,12 +686,15 @@ _, err := d.core.Exec("UPDATE users SET role = ? WHERE id = ?", roles, id)
 return err
 }
 
-func (d *DB) CreateLocalUser(email, name, password string) error {
-_, err := d.core.Exec(
-`INSERT INTO users (email, name, role, password_hash) VALUES (?, ?, 'basic', ?)`,
-email, name, password,
-)
-return err
+func (d *DB) CreateLocalUser(email, name, password string) (int64, error) {
+	res, err := d.core.Exec(
+		`INSERT INTO users (email, name, role, password_hash) VALUES (?, ?, 'basic', ?)`,
+		email, name, password,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
 }
 
 func (d *DB) UpdateLocalUser(id int64, email, name string) error {
@@ -734,9 +737,12 @@ teams = append(teams, t)
 return teams, rows.Err()
 }
 
-func (d *DB) CreateTeam(name string) error {
-_, err := d.core.Exec("INSERT INTO teams (name) VALUES (?)", name)
-return err
+func (d *DB) CreateTeam(name string) (int64, error) {
+res, err := d.core.Exec("INSERT INTO teams (name) VALUES (?)", name)
+if err != nil {
+return 0, err
+}
+return res.LastInsertId()
 }
 
 func (d *DB) UpdateTeam(id int64, name string) error {
@@ -828,12 +834,15 @@ statuses = append(statuses, s)
 return statuses, rows.Err()
 }
 
-func (d *DB) CreateStatus(s models.Status) error {
-_, err := d.presence.Exec(
-"INSERT INTO statuses (name, color, billable, on_site, sort_order) VALUES (?, ?, ?, ?, ?)",
-s.Name, s.Color, s.Billable, s.OnSite, s.SortOrder,
-)
-return err
+func (d *DB) CreateStatus(s models.Status) (int64, error) {
+	res, err := d.presence.Exec(
+		"INSERT INTO statuses (name, color, billable, on_site, sort_order) VALUES (?, ?, ?, ?, ?)",
+		s.Name, s.Color, s.Billable, s.OnSite, s.SortOrder,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
 }
 
 func (d *DB) UpdateStatus(s models.Status) error {
@@ -1058,12 +1067,15 @@ result[h.Date] = h
 return result, rows.Err()
 }
 
-func (d *DB) CreateHoliday(date, name string, allowImputed bool) error {
-_, err := d.presence.Exec(
-"INSERT INTO holidays (date, name, allow_imputed) VALUES (?, ?, ?)",
-date, name, allowImputed,
-)
-return err
+func (d *DB) CreateHoliday(date, name string, allowImputed bool) (int64, error) {
+	res, err := d.presence.Exec(
+		"INSERT INTO holidays (date, name, allow_imputed) VALUES (?, ?, ?)",
+		date, name, allowImputed,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
 }
 
 func (d *DB) UpdateHoliday(id int64, date, name string, allowImputed bool) error {

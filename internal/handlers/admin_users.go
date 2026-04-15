@@ -43,23 +43,31 @@ func (h *UsersAdminHandler) NewUserPage(w http.ResponseWriter, r *http.Request) 
 
 // CreateUser creates a new local user account.
 func (h *UsersAdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
-	email := strings.TrimSpace(r.FormValue("email"))
-	name := strings.TrimSpace(r.FormValue("name"))
-	password := r.FormValue("password")
-
-	if email == "" || name == "" || password == "" {
-		http.Redirect(w, r, "/admin/users/new?error=All+fields+are+required", http.StatusSeeOther)
+	var req struct {
+		Email    string `json:"email"`
+		Name     string `json:"name"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
-	if err := h.DB.CreateLocalUser(email, name, password); err != nil {
-		http.Redirect(w, r, "/admin/users/new?error=Email+already+in+use", http.StatusSeeOther)
+	req.Email = strings.TrimSpace(req.Email)
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Email == "" || req.Name == "" || req.Password == "" {
+		jsonError(w, "All fields are required", http.StatusBadRequest)
+		return
+	}
+	uid, err := h.DB.CreateLocalUser(req.Email, req.Name, req.Password)
+	if err != nil {
+		jsonError(w, "Email already in use", http.StatusConflict)
 		return
 	}
 	currentUser := middleware.GetUser(r)
 	if currentUser != nil {
-		h.DB.LogAdminAction(currentUser.ID, "user", 0, "create", email)
+		h.DB.LogAdminAction(currentUser.ID, "user", uid, "create", req.Email)
 	}
-	http.Redirect(w, r, "/admin/users", http.StatusSeeOther)
+	jsonOK(w, map[string]interface{}{"id": uid, "status": "ok"})
 }
 
 // UpdateUser updates a user's email and display name.

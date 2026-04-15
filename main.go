@@ -358,6 +358,7 @@ func main() {
 	// Admin routes - each section guarded by its own role
 	teamMux := http.NewServeMux()
 	teamMux.HandleFunc("GET /admin/teams", adminHandler.TeamsPage)
+	teamMux.HandleFunc("GET /api/teams", adminHandler.ListTeamsAPI)
 	teamMux.HandleFunc("POST /admin/teams", adminHandler.CreateTeam)
 	teamMux.HandleFunc("PUT /admin/teams/{id}", adminHandler.UpdateTeam)
 	teamMux.HandleFunc("DELETE /admin/teams/{id}", adminHandler.DeleteTeam)
@@ -398,6 +399,8 @@ func main() {
 	// Wire role-based middleware
 	mux.Handle("/admin/teams", middleware.Auth(database, middleware.RequireRole(models.RoleTeamManager, models.RoleTeamLeader)(teamMux)))
 	mux.Handle("/admin/teams/", middleware.Auth(database, middleware.RequireRole(models.RoleTeamManager, models.RoleTeamLeader)(teamMux)))
+	mux.Handle("/api/teams", middleware.Auth(database, middleware.RequireRole(models.RoleTeamManager, models.RoleTeamLeader)(teamMux)))
+	mux.Handle("/api/teams/", middleware.Auth(database, middleware.RequireRole(models.RoleTeamManager, models.RoleTeamLeader)(teamMux)))
 	mux.Handle("/admin/statuses", middleware.Auth(database, middleware.RequireRole(models.RoleStatusManager)(statusMux)))
 	mux.Handle("/admin/statuses/", middleware.Auth(database, middleware.RequireRole(models.RoleStatusManager)(statusMux)))
 	mux.Handle("/admin/activity", middleware.Auth(database, middleware.RequireRole(models.RoleActivityViewer, models.RoleTeamLeader)(activityMux)))

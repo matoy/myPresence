@@ -59,23 +59,39 @@ func (h *AdminHandler) TeamsPage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ListTeamsAPI returns all teams as JSON.
+func (h *AdminHandler) ListTeamsAPI(w http.ResponseWriter, r *http.Request) {
+	teams, err := h.DB.ListTeams()
+	if err != nil {
+		jsonError(w, "Erreur", http.StatusInternalServerError)
+		return
+	}
+	jsonOK(w, teams)
+}
+
 // CreateTeam creates a new team.
 func (h *AdminHandler) CreateTeam(w http.ResponseWriter, r *http.Request) {
 	currentUser := middleware.GetUser(r)
 	if currentUser != nil && !currentUser.HasAnyRole(models.RoleTeamManager, models.RoleGlobal) {
-		http.Error(w, "Access denied", http.StatusForbidden)
+		jsonError(w, "Access denied", http.StatusForbidden)
 		return
 	}
-	name := r.FormValue("name")
-	if name == "" {
-		http.Redirect(w, r, "/admin/teams?error=Nom+requis", http.StatusSeeOther)
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Name) == "" {
+		jsonError(w, "name required", http.StatusBadRequest)
 		return
 	}
-	h.DB.CreateTeam(name)
+	id, err := h.DB.CreateTeam(strings.TrimSpace(req.Name))
+	if err != nil {
+		jsonError(w, "Erreur création équipe", http.StatusInternalServerError)
+		return
+	}
 	if currentUser != nil {
-		h.DB.LogAdminAction(currentUser.ID, "team", 0, "create", name)
+		h.DB.LogAdminAction(currentUser.ID, "team", id, "create", req.Name)
 	}
-	http.Redirect(w, r, "/admin/teams", http.StatusSeeOther)
+	jsonOK(w, map[string]interface{}{"id": id, "status": "ok"})
 }
 
 // DeleteTeam deletes a team.
@@ -183,23 +199,31 @@ func (h *AdminHandler) StatusesPage(w http.ResponseWriter, r *http.Request) {
 
 // CreateStatus adds a new status.
 func (h *AdminHandler) CreateStatus(w http.ResponseWriter, r *http.Request) {
-	name := r.FormValue("name")
-	color := r.FormValue("color")
-	billable := r.FormValue("billable") == "on"
-	onSite := r.FormValue("on_site") == "on"
-	sortOrder, _ := strconv.Atoi(r.FormValue("sort_order"))
-
-	if name == "" || color == "" {
-		http.Redirect(w, r, "/admin/statuses?error=Champs+requis", http.StatusSeeOther)
+	var req struct {
+		Name      string `json:"name"`
+		Color     string `json:"color"`
+		Billable  bool   `json:"billable"`
+		OnSite    bool   `json:"on_site"`
+		SortOrder int    `json:"sort_order"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
-
-	h.DB.CreateStatus(models.Status{Name: name, Color: color, Billable: billable, OnSite: onSite, SortOrder: sortOrder})
+	if req.Name == "" || req.Color == "" {
+		jsonError(w, "Name and color are required", http.StatusBadRequest)
+		return
+	}
+	id, err := h.DB.CreateStatus(models.Status{Name: req.Name, Color: req.Color, Billable: req.Billable, OnSite: req.OnSite, SortOrder: req.SortOrder})
+	if err != nil {
+		jsonError(w, "Error creating status", http.StatusInternalServerError)
+		return
+	}
 	currentUser := middleware.GetUser(r)
 	if currentUser != nil {
-		h.DB.LogAdminAction(currentUser.ID, "status", 0, "create", name)
+		h.DB.LogAdminAction(currentUser.ID, "status", id, "create", req.Name)
 	}
-	http.Redirect(w, r, "/admin/statuses", http.StatusSeeOther)
+	jsonOK(w, map[string]interface{}{"id": id, "status": "ok"})
 }
 
 // UpdateStatus modifies a status.
