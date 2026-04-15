@@ -26,7 +26,7 @@
 
     <!-- Teams List -->
     {{range $teamItem := .Teams}}
-    <div class="bg-white rounded-xl shadow-md p-6 mb-4" x-data="{ editName: false, showAddMember: false, memberSearch: '' }">
+    <div class="bg-white rounded-xl shadow-md p-6 mb-4" x-data="{ editName: false, showAddMember: false, memberSearch: '', memberIds: [{{range $i, $m := .Members}}{{if $i}},{{end}}{{$m.ID}}{{end}}] }">
         <div class="flex items-center justify-between mb-4">
             <div class="flex items-center gap-3">
                 <div class="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -80,7 +80,7 @@
                    x-init="$watch('showAddMember', v => { if (v) $nextTick(() => $el.focus()); })"
                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-green-400/50">
             <div class="max-h-48 overflow-y-auto border border-gray-200 rounded-lg bg-white divide-y divide-gray-100">
-                <template x-for="u in allUsersForTeams.filter(u => memberSearch === '' || u.name.toLowerCase().includes(memberSearch.toLowerCase()) || u.email.toLowerCase().includes(memberSearch.toLowerCase()))" :key="u.id">
+                <template x-for="u in allUsersForTeams.filter(u => !memberIds.includes(u.id) && (memberSearch === '' || u.name.toLowerCase().includes(memberSearch.toLowerCase()) || u.email.toLowerCase().includes(memberSearch.toLowerCase())))" :key="u.id">
                     <button type="button"
                             @click="addMember({{.Team.ID}}, u.id); showAddMember = false; memberSearch = ''"
                             class="w-full text-left px-3 py-2 hover:bg-green-50 transition flex flex-col">
@@ -88,7 +88,7 @@
                         <span x-text="u.email" class="text-xs text-gray-500"></span>
                     </button>
                 </template>
-                <div x-show="allUsersForTeams.filter(u => memberSearch === '' || u.name.toLowerCase().includes(memberSearch.toLowerCase()) || u.email.toLowerCase().includes(memberSearch.toLowerCase())).length === 0"
+                <div x-show="allUsersForTeams.filter(u => !memberIds.includes(u.id) && (memberSearch === '' || u.name.toLowerCase().includes(memberSearch.toLowerCase()) || u.email.toLowerCase().includes(memberSearch.toLowerCase()))).length === 0"
                      class="px-3 py-3 text-sm text-gray-400 text-center" x-text="_t['teams.no_users']"></div>
             </div>
         </div>

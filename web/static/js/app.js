@@ -390,6 +390,10 @@ function calendarApp(statuses, currentUserId, isAdmin, presences) {
         init() {
             // End selection on mouseup
             document.addEventListener('mouseup', (e) => {
+                if (this.longPressTimer) {
+                    clearTimeout(this.longPressTimer);
+                    this.longPressTimer = null;
+                }
                 if (this.selecting && this.selectedDates.length > 0) {
                     // Show status picker
                     this.showPicker = true;

@@ -62,20 +62,12 @@
                         {{index .T "nav.floorplans"}}
                     </a>
                     {{end}}
-                    {{if .User.HasRole "team_manager"}}
-                    <a href="/admin/teams" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_teams"}}bg-white/20 text-white{{end}}">
-                        {{index .T "nav.teams"}}
-                    </a>
-                    {{else if .User.HasRole "team_leader"}}
+                    {{if or (.User.HasRole "team_manager") (.User.HasRole "team_leader")}}
                     <a href="/admin/teams" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_teams"}}bg-white/20 text-white{{end}}">
                         {{index .T "nav.teams"}}
                     </a>
                     {{end}}
-                    {{if .User.HasRole "activity_viewer"}}
-                    <a href="/admin/activity" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_activity"}}bg-white/20 text-white{{end}}">
-                        {{index .T "nav.activity"}}
-                    </a>
-                    {{else if .User.HasRole "team_leader"}}
+                    {{if or (.User.HasRole "activity_viewer") (.User.HasRole "team_leader")}}
                     <a href="/admin/activity" class="text-white/80 hover:text-white px-3 py-2 rounded-md text-sm font-medium transition {{if eq .Page "admin_activity"}}bg-white/20 text-white{{end}}">
                         {{index .T "nav.activity"}}
                     </a>
@@ -180,14 +172,10 @@
                 {{if not .DisableFloorplans}}
                 <a href="/floorplan" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">{{index .T "nav.floorplans"}}</a>
                 {{end}}
-                {{if .User.HasRole "team_manager"}}
-                <a href="/admin/teams" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">{{index .T "nav.teams"}}</a>
-                {{else if .User.HasRole "team_leader"}}
+                {{if or (.User.HasRole "team_manager") (.User.HasRole "team_leader")}}
                 <a href="/admin/teams" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">{{index .T "nav.teams"}}</a>
                 {{end}}
-                {{if .User.HasRole "activity_viewer"}}
-                <a href="/admin/activity" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">{{index .T "nav.activity"}}</a>
-                {{else if .User.HasRole "team_leader"}}
+                {{if or (.User.HasRole "activity_viewer") (.User.HasRole "team_leader")}}
                 <a href="/admin/activity" class="block text-white/80 hover:text-white px-3 py-2 rounded-md text-sm">{{index .T "nav.activity"}}</a>
                 {{end}}
                 {{if .User.HasRole "status_manager"}}

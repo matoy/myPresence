@@ -265,15 +265,6 @@ func (h *AdminHandler) UsersAPI(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, users)
 }
 
-// RolesPage renders the role management page.
-func (h *AdminHandler) RolesPage(w http.ResponseWriter, r *http.Request) {
-	users, _ := h.DB.ListUsers()
-	h.Render(w, r, "admin_roles", map[string]interface{}{
-		"Users":    users,
-		"AllRoles": models.AllRoles,
-	})
-}
-
 // UpdateUserRoles updates a user's roles.
 func (h *AdminHandler) UpdateUserRoles(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)

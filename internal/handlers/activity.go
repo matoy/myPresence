@@ -64,11 +64,11 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 	// Calculate totals (per-status and billable)
 	totalBillable := 0.0
 	totalSetDays := 0.0
-	statussTotals := make(map[int64]float64)
+	statusTotals := make(map[int64]float64)
 	for _, s := range stats {
 		totalBillable += s.BillableDays
 		for sid, count := range s.StatusCounts {
-			statussTotals[sid] += count
+			statusTotals[sid] += count
 			totalSetDays += count
 		}
 	}
@@ -170,18 +170,17 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 		"SelectedTeamID":   teamID,
 		"Year":             year,
 		"Month":            month,
-
 		"ViewMode":         viewMode,
 		"TotalBillable":    totalBillable,
 		"TotalNotSet":      totalNotSet,
 		"TotalOnSite":      totalOnSite,
 		"TotalWorkingDays": totalWorkingDays,
 		"WorkingDays":      workingDays,
-		"WorkingDaysExcl": workingDaysExcluded,
-		"HolidayCount":    holidayCount,
+		"WorkingDaysExcl":  workingDaysExcluded,
+		"HolidayCount":     holidayCount,
 		"DayBillable":      dayBillable,
 		"DayOnSite":        dayOnSite,
-		"StatusTotals":     statussTotals,
+		"StatusTotals":     statusTotals,
 		"PrevYear":         prevTime.Year(),
 		"PrevMonth":        int(prevTime.Month()),
 		"NextYear":         nextTime.Year(),

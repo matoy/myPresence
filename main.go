@@ -47,8 +47,9 @@ func main() {
 		log.Fatalf("Seed error: %v", err)
 	}
 
-	// Clean expired sessions periodically
+	// Clean expired sessions and reset tokens periodically
 	database.CleanExpiredSessions()
+	database.CleanExpiredResetTokens()
 
 	// Parse templates
 	funcMap := template.FuncMap{
@@ -137,7 +138,7 @@ func main() {
 	}
 
 	templates := make(map[string]*template.Template)
-	pages := []string{"login", "calendar", "admin_teams", "admin_statuses", "admin_activity", "admin_holidays", "admin_users", "admin_user_new", "admin_user_logs", "floorplan", "admin_floorplans", "admin_roles", "pat", "settings_change_password", "forgot_password", "reset_password"}
+	pages := []string{"login", "calendar", "admin_teams", "admin_statuses", "admin_activity", "admin_holidays", "admin_users", "admin_user_new", "admin_user_logs", "floorplan", "admin_floorplans", "pat", "settings_change_password", "forgot_password", "reset_password"}
 	for _, page := range pages {
 		t, err := template.New("").Funcs(funcMap).ParseFS(
 			templateFS,
@@ -190,7 +191,6 @@ func main() {
 			Lang:              lang,
 			SupportedLangs:    i18n.Supported,
 		}
-		_ = logoExists
 		// Add logo flag to config map
 		configMap := pd.Config.(map[string]string)
 		if logoExists {

@@ -182,16 +182,16 @@ function floorplanApp(initialSeats, initialDate, initialHalf, initialFpID) {
         },
 
         prevDay() {
-            const d = new Date(this.date + 'T00:00:00');
+            const d = new Date(this.date + 'T12:00:00');
             d.setDate(d.getDate() - 1);
-            this.date = d.toISOString().split('T')[0];
+            this.date = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
             this.reload();
         },
 
         nextDay() {
-            const d = new Date(this.date + 'T00:00:00');
+            const d = new Date(this.date + 'T12:00:00');
             d.setDate(d.getDate() + 1);
-            this.date = d.toISOString().split('T')[0];
+            this.date = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
             this.reload();
         },
 
