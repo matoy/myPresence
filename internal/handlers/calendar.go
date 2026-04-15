@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"presence-app/internal/db"
+	"presence-app/internal/metrics"
 	"presence-app/internal/middleware"
 	"presence-app/internal/models"
 )
@@ -138,6 +139,13 @@ func (h *CalendarHandler) SetPresences(w http.ResponseWriter, r *http.Request) {
 
 	h.DB.LogPresenceAction(user.ID, req.UserID, "set", req.Dates, req.StatusID, req.Half)
 
+	half := req.Half
+	if half == "" {
+		half = "full"
+	}
+	metrics.PresenceOpsTotal.WithLabelValues("set", half).Inc()
+	metrics.PresenceDaysTotal.WithLabelValues("set").Add(float64(len(req.Dates)))
+
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 
@@ -166,6 +174,13 @@ func (h *CalendarHandler) ClearPresences(w http.ResponseWriter, r *http.Request)
 	}
 
 	h.DB.LogPresenceAction(user.ID, req.UserID, "clear", req.Dates, 0, req.Half)
+
+	clearHalf := req.Half
+	if clearHalf == "" {
+		clearHalf = "all"
+	}
+	metrics.PresenceOpsTotal.WithLabelValues("clear", clearHalf).Inc()
+	metrics.PresenceDaysTotal.WithLabelValues("clear").Add(float64(len(req.Dates)))
 
 	jsonOK(w, map[string]string{"status": "ok"})
 }

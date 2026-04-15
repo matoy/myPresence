@@ -339,6 +339,72 @@ The response includes:
 
 ---
 
+## Prometheus Metrics
+
+myPresence exposes a Prometheus-compatible `/metrics` endpoint protected by a static Bearer token.
+
+### Enable
+
+Set `METRICS_TOKEN` to a strong random value in `docker-compose.yml`:
+
+```yaml
+- METRICS_TOKEN=your-strong-random-token
+```
+
+The endpoint returns `404 Not Found` when the variable is unset or empty.
+
+### Prometheus scrape config
+
+```yaml
+# prometheus.yml
+scrape_configs:
+  - job_name: mypresence
+    bearer_token: your-strong-random-token   # same value as METRICS_TOKEN
+    static_configs:
+      - targets: ['presence-app:8080']       # hostname:port of the container
+```
+
+Alternatively, pass the token as a query parameter (less preferred):
+
+```
+GET http://presence-app:8080/metrics?token=your-strong-random-token
+```
+
+### Exposed metrics
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `mypresence_http_requests_total{method,path,status_class}` | Counter | HTTP request count by method, normalised path, and status class (`2xx` / `4xx` / `5xx`) |
+| `mypresence_http_request_duration_seconds{method,path}` | Histogram | HTTP latency distribution (P50 / P95 / P99) |
+| `mypresence_auth_logins_total{method,result}` | Counter | Login attempts — `method`: `local`/`saml`, `result`: `success`/`failure` |
+| `mypresence_auth_logouts_total` | Counter | Logout count |
+| `mypresence_presence_operations_total{action,half}` | Counter | Presence set/clear API calls |
+| `mypresence_presence_days_total{action}` | Counter | Individual day-records written or deleted |
+| `mypresence_db_users_total` | Gauge | Registered users |
+| `mypresence_db_sessions_active_total` | Gauge | Active sessions |
+| `mypresence_db_teams_total` | Gauge | Teams |
+| `mypresence_db_statuses_total` | Gauge | Presence statuses |
+| `mypresence_db_presences_total` | Gauge | Total presence records stored |
+| `mypresence_db_floorplans_total` | Gauge | Floor plans |
+| `mypresence_db_seats_total` | Gauge | Seats across all floor plans |
+
+Standard Go runtime metrics (`go_goroutines`, `go_memstats_*`, `go_gc_duration_seconds`, …) are also included automatically.
+
+### Grafana dashboard
+
+A ready-to-import Grafana dashboard is available at [`grafana/dashboard.json`](grafana/dashboard.json).
+
+Import it via **Dashboards → Import → Upload JSON file** and select your Prometheus datasource. The dashboard covers:
+
+- **Overview**: request rate, error rate, P95 latency, active sessions
+- **HTTP Traffic**: requests/s by status class, latency percentiles, per-route table (RPS / errors / P95)
+- **Authentication**: login success rate, failed login count, events timeline
+- **Presence Activity**: set/clear operations, half-day breakdown (donut), daily write rate
+- **Database**: gauge trends for users, sessions, presences, teams, seats
+- **Go Runtime**: goroutines, heap memory, GC pause duration
+
+---
+
 ## Rebuilding After Changes
 
 Templates and static files are embedded (`//go:embed`) into the binary at build time. Any change requires a rebuild:

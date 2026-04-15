@@ -12,10 +12,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"presence-app/internal/config"
 	"presence-app/internal/db"
 	"presence-app/internal/handlers"
 	"presence-app/internal/i18n"
+	"presence-app/internal/metrics"
 	"presence-app/internal/middleware"
 	"presence-app/internal/models"
 )
@@ -233,6 +236,20 @@ func main() {
 		}
 	}
 
+	// Register DB gauge collector for Prometheus
+	metrics.RegisterDBCollector(func() metrics.DBStats {
+		c := database.Counts()
+		return metrics.DBStats{
+			Users:          float64(c.Users),
+			ActiveSessions: float64(c.ActiveSessions),
+			Teams:          float64(c.Teams),
+			Statuses:       float64(c.Statuses),
+			Presences:      float64(c.Presences),
+			Floorplans:     float64(c.Floorplans),
+			Seats:          float64(c.Seats),
+		}
+	})
+
 	// Router
 	mux := http.NewServeMux()
 
@@ -273,6 +290,24 @@ func main() {
 
 	// Health check (public, no auth)
 	mux.HandleFunc("GET /health", healthHandler.Health)
+
+	// Metrics endpoint (token-protected)
+	mux.HandleFunc("GET /metrics", func(w http.ResponseWriter, r *http.Request) {
+		if cfg.MetricsToken == "" {
+			http.Error(w, "Metrics not enabled", http.StatusNotFound)
+			return
+		}
+		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if token == "" {
+			token = r.URL.Query().Get("token")
+		}
+		if token != cfg.MetricsToken {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="mypresence-metrics"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+		promhttp.Handler().ServeHTTP(w, r)
+	})
 
 	// Language switcher (public, sets a cookie and redirects back)
 	mux.HandleFunc("POST /set-lang", func(w http.ResponseWriter, r *http.Request) {
@@ -448,7 +483,10 @@ func main() {
 	if cfg.SAMLEnabled {
 		log.Printf("   SAML SSO: activé (Entity ID: %s)", cfg.SAMLEntityID)
 	}
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if cfg.MetricsToken != "" {
+		log.Printf("   Métriques Prometheus: http://localhost%s/metrics", addr)
+	}
+	if err := http.ListenAndServe(addr, metrics.Instrument(mux)); err != nil {
 		log.Fatal(err)
 	}
 }

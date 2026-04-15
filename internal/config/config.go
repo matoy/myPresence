@@ -42,6 +42,9 @@ type Config struct {
 	// Internationalisation
 	DefaultLang string
 
+	// Observability
+	MetricsToken string
+
 	// Features
 	DisableFloorplans bool
 	DisableAPI        bool
@@ -81,6 +84,8 @@ func Load() *Config {
 		SAMLKeyFile:        getEnv("SAML_SP_KEY_FILE", ""),
 
 		DefaultLang: getEnv("DEFAULT_LANG", "en"),
+
+		MetricsToken: getEnv("METRICS_TOKEN", ""),
 
 		DisableFloorplans: getEnvBool("DISABLE_FLOORPLANS", false),
 		DisableAPI:        getEnvBool("DISABLE_API", false),

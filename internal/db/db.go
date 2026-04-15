@@ -131,6 +131,31 @@ func (d *DB) Ping() error {
 	return nil
 }
 
+// DBCounts holds point-in-time record counts from all databases.
+type DBCounts struct {
+	Users          int64
+	ActiveSessions int64
+	Teams          int64
+	Statuses       int64
+	Presences      int64
+	Floorplans     int64
+	Seats          int64
+}
+
+// Counts queries lightweight COUNT(*) rows from each database.
+// Errors are silently ignored; missing tables return 0.
+func (d *DB) Counts() DBCounts {
+	var c DBCounts
+	d.core.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&c.Users)
+	d.core.QueryRow(`SELECT COUNT(*) FROM sessions WHERE expires_at > datetime('now')`).Scan(&c.ActiveSessions)
+	d.core.QueryRow(`SELECT COUNT(*) FROM teams`).Scan(&c.Teams)
+	d.presence.QueryRow(`SELECT COUNT(*) FROM statuses`).Scan(&c.Statuses)
+	d.presence.QueryRow(`SELECT COUNT(*) FROM presences`).Scan(&c.Presences)
+	d.floorplan.QueryRow(`SELECT COUNT(*) FROM floorplans`).Scan(&c.Floorplans)
+	d.floorplan.QueryRow(`SELECT COUNT(*) FROM seats`).Scan(&c.Seats)
+	return c
+}
+
 // Close closes all database connections.
 func (d *DB) Close() {
 if d.core != nil {

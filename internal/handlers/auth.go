@@ -17,6 +17,7 @@ import (
 
 	"presence-app/internal/config"
 	"presence-app/internal/db"
+	"presence-app/internal/metrics"
 	"presence-app/internal/middleware"
 
 	"github.com/crewjam/saml"
@@ -129,6 +130,7 @@ func (h *AuthHandler) LocalLogin(w http.ResponseWriter, r *http.Request) {
 		// Hardcoded admin credentials
 		user, err := h.DB.GetUserByEmail(username)
 		if err != nil {
+			metrics.AuthLoginsTotal.WithLabelValues("local", "failure").Inc()
 			http.Redirect(w, r, "/login?error=Internal+error", http.StatusSeeOther)
 			return
 		}
@@ -137,10 +139,12 @@ func (h *AuthHandler) LocalLogin(w http.ResponseWriter, r *http.Request) {
 		// Try DB local user
 		user, err := h.DB.GetUserByEmail(username)
 		if err != nil || user.PasswordHash == "" || user.PasswordHash != password {
+			metrics.AuthLoginsTotal.WithLabelValues("local", "failure").Inc()
 			http.Redirect(w, r, "/login?error=Invalid+credentials", http.StatusSeeOther)
 			return
 		}
 		if user.Disabled {
+			metrics.AuthLoginsTotal.WithLabelValues("local", "failure").Inc()
 			http.Redirect(w, r, "/login?error=Account+disabled", http.StatusSeeOther)
 			return
 		}
@@ -149,9 +153,12 @@ func (h *AuthHandler) LocalLogin(w http.ResponseWriter, r *http.Request) {
 
 	token, err := h.DB.CreateSession(userID)
 	if err != nil {
+		metrics.AuthLoginsTotal.WithLabelValues("local", "failure").Inc()
 		http.Redirect(w, r, "/login?error=Internal+error", http.StatusSeeOther)
 		return
 	}
+
+	metrics.AuthLoginsTotal.WithLabelValues("local", "success").Inc()
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session",
@@ -170,6 +177,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		h.DB.DeleteSession(cookie.Value)
 	}
+	metrics.AuthLogoutsTotal.Inc()
 	http.SetCookie(w, &http.Cookie{Name: "session", MaxAge: -1, Path: "/"})
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
@@ -279,10 +287,12 @@ func (h *AuthHandler) SAMLACS(w http.ResponseWriter, r *http.Request) {
 
 	token, err := h.DB.CreateSession(user.ID)
 	if err != nil {
+		metrics.AuthLoginsTotal.WithLabelValues("saml", "failure").Inc()
 		http.Redirect(w, r, "/login?error=Erreur+session", http.StatusSeeOther)
 		return
 	}
 
+	metrics.AuthLoginsTotal.WithLabelValues("saml", "success").Inc()
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session",
 		Value:    token,
