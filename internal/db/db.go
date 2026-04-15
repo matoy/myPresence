@@ -423,7 +423,7 @@ func (d *DB) SeedDefaults(adminUser, adminPass string) error {
 _, err := d.core.Exec(`
 INSERT OR IGNORE INTO users (email, name, role, password_hash)
 VALUES (?, ?, 'global', ?)
-`, adminUser, "Administrateur", adminPass)
+`, adminUser, "Administrator", adminPass)
 if err != nil {
 return err
 }
