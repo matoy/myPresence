@@ -112,6 +112,22 @@ services:
       - ADMIN_PASSWORD=admin
 
       # =====================================================================
+      # PASSWORD RESET (SMTP)
+      # =====================================================================
+      #
+      # Enable the "Forgot password?" feature for local accounts by providing
+      # an SMTP connection string. Leave SMTP_URL unset to disable the feature.
+      #
+      # Supported schemes:
+      #   smtp://user:pass@host:587   — STARTTLS (recommended, e.g. Office 365)
+      #   smtps://user:pass@host:465  — direct TLS (e.g. Gmail)
+      #   smtp://host:25              — unauthenticated relay
+      #
+      # - SMTP_URL=smtp://user:password@smtp.example.com:587
+      # - SMTP_FROM=noreply@example.com
+      # - APP_URL=https://presence.example.com
+
+      # =====================================================================
       # SAML2 / SSO AUTHENTICATION (Microsoft Entra ID)
       # =====================================================================
       #
