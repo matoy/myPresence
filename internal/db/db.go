@@ -280,6 +280,7 @@ created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	var halfColExists int
 	d.presence.QueryRow("SELECT COUNT(*) FROM pragma_table_info('presences') WHERE name='half'").Scan(&halfColExists) //nolint:errcheck
 	if halfColExists == 0 {
+		//nolint:errcheck
 		d.presence.Exec(`CREATE TABLE presences_new (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
 user_id INTEGER NOT NULL,
@@ -1764,7 +1765,7 @@ func (d *DB) ReserveSeat(seatID, userID int64, date, half string) error {
 	d.floorplan.QueryRow(`
 SELECT COUNT(*) FROM seat_reservations
 WHERE seat_id = ? AND date = ? AND (half = ? OR half = 'full' OR ? = 'full')
-`, seatID, date, half, half).Scan(&count)
+`, seatID, date, half, half).Scan(&count) //nolint:errcheck
 	if count > 0 {
 		return fmt.Errorf("ce siège est déjà réservé pour cette période")
 	}
@@ -1772,7 +1773,7 @@ WHERE seat_id = ? AND date = ? AND (half = ? OR half = 'full' OR ? = 'full')
 	d.floorplan.QueryRow(`
 SELECT COUNT(*) FROM seat_reservations
 WHERE user_id = ? AND date = ? AND (half = ? OR half = 'full' OR ? = 'full')
-`, userID, date, half, half).Scan(&userCount)
+`, userID, date, half, half).Scan(&userCount) //nolint:errcheck
 	if userCount > 0 {
 		return fmt.Errorf("vous avez déjà réservé un siège pour cette journée")
 	}

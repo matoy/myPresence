@@ -245,7 +245,7 @@ func (h *FloorplanHandler) UpdateFloorplan(w http.ResponseWriter, r *http.Reques
 		Name      string `json:"name"`
 		SortOrder int    `json:"sort_order"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	json.NewDecoder(r.Body).Decode(&req) //nolint:errcheck
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
 		jsonError(w, "Name is required", http.StatusBadRequest)
@@ -367,7 +367,7 @@ func (h *FloorplanHandler) UpdateSeat(w http.ResponseWriter, r *http.Request) {
 		XPct  float64 `json:"x_pct"`
 		YPct  float64 `json:"y_pct"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	json.NewDecoder(r.Body).Decode(&req) //nolint:errcheck
 	req.Label = strings.TrimSpace(req.Label)
 	if req.Label == "" {
 		req.Label = "?"

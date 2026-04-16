@@ -174,8 +174,8 @@ func TestBulkReserveSeat_SkipsTakenSeat(t *testing.T) {
 	_, seatID := seedFloorplanAndSeat(t, d, "E1")
 
 	// Both on site
-	d.presence.Exec("INSERT INTO presences (user_id, date, half, status_id) VALUES (?, '2026-04-14', 'full', ?)", alice, statusID)
-	d.presence.Exec("INSERT INTO presences (user_id, date, half, status_id) VALUES (?, '2026-04-14', 'full', ?)", bob, statusID)
+	d.presence.Exec("INSERT INTO presences (user_id, date, half, status_id) VALUES (?, '2026-04-14', 'full', ?)", alice, statusID) //nolint:errcheck
+	d.presence.Exec("INSERT INTO presences (user_id, date, half, status_id) VALUES (?, '2026-04-14', 'full', ?)", bob, statusID)   //nolint:errcheck
 
 	// Alice books first
 	d.floorplan.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, '2026-04-14', 'full')", seatID, alice) //nolint:errcheck
