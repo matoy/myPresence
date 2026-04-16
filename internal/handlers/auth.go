@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"presence-app/internal/db"
 	"presence-app/internal/metrics"
 	"presence-app/internal/middleware"
+	"presence-app/internal/models"
 
 	"github.com/crewjam/saml"
 	"github.com/crewjam/saml/samlsp"
@@ -309,6 +311,36 @@ func (h *AuthHandler) SAMLACS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Apply RBAC: map IDP groups to application roles if group mapping is configured.
+	if h.Config.SAMLGroupGlobal != "" || h.Config.SAMLGroupTeamManager != "" ||
+		h.Config.SAMLGroupTeamLeader != "" || h.Config.SAMLGroupStatusManager != "" ||
+		h.Config.SAMLGroupActivityViewer != "" || h.Config.SAMLGroupFloorplanManager != "" {
+		groups := getAttributeValues(assertion, h.Config.SAMLGroupsClaim)
+		groupSet := make(map[string]bool, len(groups))
+		for _, g := range groups {
+			groupSet[g] = true
+		}
+		var roles []string
+		for _, mapping := range []struct{ groupID, role string }{
+			{h.Config.SAMLGroupGlobal, models.RoleGlobal},
+			{h.Config.SAMLGroupTeamManager, models.RoleTeamManager},
+			{h.Config.SAMLGroupTeamLeader, models.RoleTeamLeader},
+			{h.Config.SAMLGroupStatusManager, models.RoleStatusManager},
+			{h.Config.SAMLGroupActivityViewer, models.RoleActivityViewer},
+			{h.Config.SAMLGroupFloorplanManager, models.RoleFloorplanManager},
+		} {
+			if mapping.groupID != "" && groupSet[mapping.groupID] {
+				roles = append(roles, mapping.role)
+			}
+		}
+		if len(roles) == 0 {
+			roles = []string{models.RoleBasic}
+		}
+		if err := h.DB.UpdateUserRoles(user.ID, strings.Join(roles, ",")); err != nil {
+			log.Printf("SAML role sync error: %v", err)
+		}
+	}
+
 	token, err := h.DB.CreateSession(user.ID)
 	if err != nil {
 		metrics.AuthLoginsTotal.WithLabelValues("saml", "failure").Inc()
@@ -338,6 +370,22 @@ func getAttributeValue(assertion *saml.Assertion, name string) string {
 		}
 	}
 	return ""
+}
+
+// getAttributeValues returns all values for the named attribute in a SAML assertion.
+func getAttributeValues(assertion *saml.Assertion, name string) []string {
+	for _, stmt := range assertion.AttributeStatements {
+		for _, attr := range stmt.Attributes {
+			if attr.Name == name {
+				vals := make([]string, 0, len(attr.Values))
+				for _, v := range attr.Values {
+					vals = append(vals, v.Value)
+				}
+				return vals
+			}
+		}
+	}
+	return nil
 }
 
 // generateSelfSignedCert creates a self-signed TLS certificate for SAML SP.

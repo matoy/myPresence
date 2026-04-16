@@ -38,6 +38,14 @@ type Config struct {
 	SAMLRootURL        string
 	SAMLCertFile       string
 	SAMLKeyFile        string
+	// SAML group → role mapping (Entra ID group Object IDs)
+	SAMLGroupsClaim           string // claim URI that carries group values (default: Entra standard)
+	SAMLGroupGlobal           string // group ID → global (admin) role
+	SAMLGroupTeamManager      string // group ID → team_manager role
+	SAMLGroupTeamLeader       string // group ID → team_leader role
+	SAMLGroupStatusManager    string // group ID → status_manager role
+	SAMLGroupActivityViewer   string // group ID → activity_viewer role
+	SAMLGroupFloorplanManager string // group ID → floorplan_manager role
 
 	// Internationalisation
 	DefaultLang string
@@ -82,6 +90,14 @@ func Load() *Config {
 		SAMLRootURL:        getEnv("SAML_ROOT_URL", ""),
 		SAMLCertFile:       getEnv("SAML_SP_CERT_FILE", ""),
 		SAMLKeyFile:        getEnv("SAML_SP_KEY_FILE", ""),
+
+		SAMLGroupsClaim:           getEnv("SAML_GROUPS_CLAIM", "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups"),
+		SAMLGroupGlobal:           getEnv("SAML_GROUP_GLOBAL", ""),
+		SAMLGroupTeamManager:      getEnv("SAML_GROUP_TEAM_MANAGER", ""),
+		SAMLGroupTeamLeader:       getEnv("SAML_GROUP_TEAM_LEADER", ""),
+		SAMLGroupStatusManager:    getEnv("SAML_GROUP_STATUS_MANAGER", ""),
+		SAMLGroupActivityViewer:   getEnv("SAML_GROUP_ACTIVITY_VIEWER", ""),
+		SAMLGroupFloorplanManager: getEnv("SAML_GROUP_FLOORPLAN_MANAGER", ""),
 
 		DefaultLang: getEnv("DEFAULT_LANG", "en"),
 

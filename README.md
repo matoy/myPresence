@@ -101,6 +101,8 @@ SSO is enabled when both `SAML_IDP_METADATA_URL` and `SAML_ENTITY_ID` are set. N
 - Initiation: `GET /saml/login`
 - ACS (Assertion Consumer Service): `POST /saml/acs`
 
+Roles can be automatically assigned at login based on IDP group membership (e.g. Microsoft Entra ID Security Groups). Configure Entra to include a group claim (`http://schemas.microsoft.com/ws/2008/06/identity/claims/groups`, format: Object ID) then map each group to an application role.
+
 ---
 
 ## Roles & Permissions
