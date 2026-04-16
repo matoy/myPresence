@@ -12,8 +12,8 @@
 
 services:
   presence:
-    build: .
-    #image: matoy/mypresence:latest
+    #build: .
+    image: matoy/mypresence:latest
     container_name: presence-app
     restart: unless-stopped
     ports:
