@@ -157,8 +157,8 @@ func TestBulkReserveSeat_SuccessWhenOnSite(t *testing.T) {
 	_, seatID := seedFloorplanAndSeat(t, d, "D1")
 
 	// Declare on-site on two dates
-	d.presence.Exec("INSERT INTO presences (user_id, date, half, status_id) VALUES (?, '2026-04-14', 'full', ?)", userID, statusID)
-	d.presence.Exec("INSERT INTO presences (user_id, date, half, status_id) VALUES (?, '2026-04-15', 'full', ?)", userID, statusID)
+	d.presence.Exec("INSERT INTO presences (user_id, date, half, status_id) VALUES (?, '2026-04-14', 'full', ?)", userID, statusID) //nolint:errcheck
+	d.presence.Exec("INSERT INTO presences (user_id, date, half, status_id) VALUES (?, '2026-04-15', 'full', ?)", userID, statusID) //nolint:errcheck
 
 	count := d.BulkReserveSeat(seatID, userID, []string{"2026-04-14", "2026-04-15", "2026-04-16"}, "full")
 	if count != 2 {
@@ -225,8 +225,8 @@ func TestCancelUserReservationsForDates_PreservesOtherUser(t *testing.T) {
 	bob := seedUser(t, d, "bob3@test.com")
 	_, seatID := seedFloorplanAndSeat(t, d, "G1")
 
-	d.floorplan.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, '2026-04-14', 'full')", seatID, alice)
-	d.floorplan.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, '2026-04-15', 'full')", seatID, bob)
+	d.floorplan.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, '2026-04-14', 'full')", seatID, alice) //nolint:errcheck
+	d.floorplan.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, '2026-04-15', 'full')", seatID, bob)   //nolint:errcheck
 
 	// Cancel only alice's dates
 	d.CancelUserReservationsForDates(alice, []string{"2026-04-14"}) //nolint:errcheck

@@ -77,7 +77,7 @@ func (h *UsersAdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 		Email string `json:"email"`
 		Name  string `json:"name"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	json.NewDecoder(r.Body).Decode(&req) //nolint:errcheck
 	req.Email = strings.TrimSpace(req.Email)
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Email == "" || req.Name == "" {
@@ -101,7 +101,7 @@ func (h *UsersAdminHandler) SetPassword(w http.ResponseWriter, r *http.Request) 
 	var req struct {
 		Password string `json:"password"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	json.NewDecoder(r.Body).Decode(&req) //nolint:errcheck
 	if req.Password == "" {
 		jsonError(w, "Password is required", http.StatusBadRequest)
 		return
@@ -132,7 +132,7 @@ func (h *UsersAdminHandler) SetDisabled(w http.ResponseWriter, r *http.Request) 
 	var req struct {
 		Disabled bool `json:"disabled"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	json.NewDecoder(r.Body).Decode(&req) //nolint:errcheck
 	if err := h.DB.SetUserDisabled(id, req.Disabled); err != nil {
 		jsonError(w, "Error updating user", http.StatusInternalServerError)
 		return

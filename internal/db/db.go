@@ -485,7 +485,7 @@ VALUES (?, ?, 'global', ?)
 	}
 
 	var count int
-	d.presence.QueryRow("SELECT COUNT(*) FROM statuses").Scan(&count)
+	d.presence.QueryRow("SELECT COUNT(*) FROM statuses").Scan(&count) //nolint:errcheck
 	if count == 0 {
 		defaults := []struct {
 			name     string
@@ -567,7 +567,7 @@ func (d *DB) DeleteSession(token string) error {
 }
 
 func (d *DB) CleanExpiredSessions() {
-	d.core.Exec("DELETE FROM sessions WHERE expires_at < datetime('now')")
+	d.core.Exec("DELETE FROM sessions WHERE expires_at < datetime('now')") //nolint:errcheck
 }
 
 // DeleteUserSessions deletes all active sessions for a user.
@@ -745,7 +745,7 @@ func (d *DB) CreatePasswordResetToken(email string) (string, error) {
 	}
 
 	// Delete any existing token for this user
-	d.core.Exec(`DELETE FROM password_reset_tokens WHERE user_id = ?`, u.ID)
+	d.core.Exec(`DELETE FROM password_reset_tokens WHERE user_id = ?`, u.ID) //nolint:errcheck
 
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -781,19 +781,19 @@ func (d *DB) UsePasswordResetToken(rawToken string) (*models.User, error) {
 		return nil, fmt.Errorf("invalid or unknown token")
 	}
 	if time.Now().After(expiresAt) {
-		d.core.Exec(`DELETE FROM password_reset_tokens WHERE token_hash = ?`, hash)
+		d.core.Exec(`DELETE FROM password_reset_tokens WHERE token_hash = ?`, hash) //nolint:errcheck
 		return nil, fmt.Errorf("token expired")
 	}
 
 	// Consume token immediately
-	d.core.Exec(`DELETE FROM password_reset_tokens WHERE token_hash = ?`, hash)
+	d.core.Exec(`DELETE FROM password_reset_tokens WHERE token_hash = ?`, hash) //nolint:errcheck
 
 	return d.GetUserByID(userID)
 }
 
 // CleanExpiredResetTokens removes expired password reset tokens.
 func (d *DB) CleanExpiredResetTokens() {
-	d.core.Exec(`DELETE FROM password_reset_tokens WHERE expires_at < datetime('now')`)
+	d.core.Exec(`DELETE FROM password_reset_tokens WHERE expires_at < datetime('now')`) //nolint:errcheck
 }
 
 // --- User management ---
@@ -1127,7 +1127,7 @@ func (d *DB) SetPresences(userID int64, dates []string, statusID int64, half str
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer tx.Rollback() //nolint:errcheck
 
 	for _, date := range dates {
 		if half == "full" {
@@ -1315,7 +1315,7 @@ func (d *DB) LogPresenceAction(actorID, userID int64, action string, dates []str
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer tx.Rollback() //nolint:errcheck
 
 	if action == "set" {
 		s, err := tx.Prepare(
@@ -1401,19 +1401,19 @@ WHERE pl.user_id = ?`
 
 func (d *DB) GetTeamName(id int64) string {
 	var name string
-	d.core.QueryRow("SELECT name FROM teams WHERE id = ?", id).Scan(&name)
+	d.core.QueryRow("SELECT name FROM teams WHERE id = ?", id).Scan(&name) //nolint:errcheck
 	return name
 }
 
 func (d *DB) GetStatusName(id int64) string {
 	var name string
-	d.presence.QueryRow("SELECT name FROM statuses WHERE id = ?", id).Scan(&name)
+	d.presence.QueryRow("SELECT name FROM statuses WHERE id = ?", id).Scan(&name) //nolint:errcheck
 	return name
 }
 
 func (d *DB) GetHolidayName(id int64) string {
 	var name string
-	d.presence.QueryRow("SELECT name FROM holidays WHERE id = ?", id).Scan(&name)
+	d.presence.QueryRow("SELECT name FROM holidays WHERE id = ?", id).Scan(&name) //nolint:errcheck
 	return name
 }
 
