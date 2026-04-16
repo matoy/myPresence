@@ -1016,7 +1016,7 @@ ORDER BY t.name
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var teams []models.Team
 	for rows.Next() {
@@ -1036,7 +1036,7 @@ func (d *DB) ListStatuses() ([]models.Status, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var statuses []models.Status
 	for rows.Next() {
@@ -1098,15 +1098,13 @@ func (d *DB) GetPresences(userIDs []int64, startDate, endDate string) (map[int64
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	for rows.Next() {
 		var userID, statusID int64
 		var date, half string
 		if err := rows.Scan(&userID, &date, &half, &statusID); err != nil {
 			return nil, err
-		}
-		if result[userID] == nil {
 			result[userID] = make(map[string]map[string]int64)
 		}
 		if result[userID][date] == nil {
