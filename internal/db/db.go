@@ -1105,6 +1105,8 @@ func (d *DB) GetPresences(userIDs []int64, startDate, endDate string) (map[int64
 		var date, half string
 		if err := rows.Scan(&userID, &date, &half, &statusID); err != nil {
 			return nil, err
+		}
+		if result[userID] == nil {
 			result[userID] = make(map[string]map[string]int64)
 		}
 		if result[userID][date] == nil {
