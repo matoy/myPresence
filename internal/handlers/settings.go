@@ -117,6 +117,30 @@ func (h *SettingsHandler) ChangePasswordPost(w http.ResponseWriter, r *http.Requ
 	http.Redirect(w, r, "/settings/change-password?success=Mot+de+passe+modifi%C3%A9+avec+succ%C3%A8s", http.StatusSeeOther)
 }
 
+// ImpersonatePage renders the list of users an admin can impersonate.
+func (h *SettingsHandler) ImpersonatePage(w http.ResponseWriter, r *http.Request) {
+	admin := middleware.GetUser(r)
+	if admin == nil || !admin.HasRole(models.RoleGlobal) {
+		http.Error(w, "Accès refusé", http.StatusForbidden)
+		return
+	}
+	users, err := h.DB.ListUsers()
+	if err != nil {
+		http.Error(w, "Erreur", http.StatusInternalServerError)
+		return
+	}
+	// Exclude the admin themselves and disabled accounts
+	filtered := users[:0]
+	for _, u := range users {
+		if u.ID != admin.ID && !u.Disabled {
+			filtered = append(filtered, u)
+		}
+	}
+	h.Render(w, r, "impersonate", map[string]interface{}{
+		"Users": filtered,
+	})
+}
+
 // ImpersonatePost allows a global admin to take on the session of another user.
 func (h *SettingsHandler) ImpersonatePost(w http.ResponseWriter, r *http.Request) {
 	admin := middleware.GetUser(r)
