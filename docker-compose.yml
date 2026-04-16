@@ -143,7 +143,7 @@ services:
       # - APP_URL=https://presence.example.com
 
       # =====================================================================
-      # SAML2 / SSO AUTHENTICATION (Microsoft Entra ID)
+      # SAML2 / SSO AUTHENTICATION (Microsoft Entra ID example)
       # =====================================================================
       #
       # To enable SSO authentication with Microsoft Entra ID:
@@ -200,6 +200,39 @@ services:
       #   2. Uncomment the following lines
       # - SAML_SP_CERT_FILE=/data/saml/sp-cert.pem
       # - SAML_SP_KEY_FILE=/data/saml/sp-key.pem
+
+      # ── STEP 5 (optional): RBAC — Map Entra ID groups to application roles ──
+      #
+      # By default all SSO users receive the "basic" role.
+      # You can automatically assign application roles based on Entra group membership.
+      #
+      # How to set it up in Entra ID:
+      #   1. In your Enterprise Application, go to "App roles" and create roles
+      #      OR use existing Security Groups / Microsoft 365 Groups
+      #   2. Go to "Single sign-on" → "Attributes & Claims"
+      #   3. Click "+ Add a group claim"
+      #   4. Select "Security groups" (or "All groups"), format: "Object ID"
+      #   5. The claim URI will be:
+      #      http://schemas.microsoft.com/ws/2008/06/identity/claims/groups
+      #      (this is the default value for SAML_GROUPS_CLAIM)
+      #   6. Copy the Object ID of each group from "Groups" in Entra ID
+      #      and paste it in the corresponding variable below
+      #
+      # Claim URI for group values (default: Entra standard — only change if your IdP uses a different URI)
+      # - SAML_GROUPS_CLAIM=http://schemas.microsoft.com/ws/2008/06/identity/claims/groups
+      #
+      # Map each Entra group Object ID to an application role:
+      # - SAML_GROUP_GLOBAL=<object-id>          # Global admin (all permissions)
+      # - SAML_GROUP_TEAM_MANAGER=<object-id>    # Manage teams and memberships
+      # - SAML_GROUP_TEAM_LEADER=<object-id>     # View and manage own team activity
+      # - SAML_GROUP_STATUS_MANAGER=<object-id>  # Manage presence statuses
+      # - SAML_GROUP_ACTIVITY_VIEWER=<object-id> # View all users activity
+      # - SAML_GROUP_FLOORPLAN_MANAGER=<object-id> # Manage floor plans and seats
+      #
+      # Notes:
+      # - A user can match multiple groups and will receive all corresponding roles
+      # - If no group matches, the user falls back to the "basic" role
+      # - Roles are re-evaluated at every login
 
 #volumes:
 #  presence-data:
