@@ -138,7 +138,7 @@ func (e *Env) LoginSession(t *testing.T, username, password string) {
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("login failed: status %d", resp.StatusCode)
 	}
-	resp.Body.Close()
+	resp.Body.Close() //nolint:errcheck
 }
 
 // InjectUser creates a fake session directly in the DB for the given user

@@ -841,7 +841,7 @@ func (d *DB) ListUsers() ([]models.User, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var users []models.User
 	for rows.Next() {
@@ -939,7 +939,7 @@ func (d *DB) ListTeams() ([]models.Team, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var teams []models.Team
 	for rows.Next() {
@@ -981,7 +981,7 @@ ORDER BY u.name
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var users []models.User
 	for rows.Next() {
