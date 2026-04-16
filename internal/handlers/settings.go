@@ -92,10 +92,14 @@ func (h *SettingsHandler) ChangePasswordPost(w http.ResponseWriter, r *http.Requ
 		http.Redirect(w, r, "/settings/change-password?error=Les+mots+de+passe+ne+correspondent+pas", http.StatusSeeOther)
 		return
 	}
+	if len(newPwd) < 8 {
+		http.Redirect(w, r, "/settings/change-password?error=Le+mot+de+passe+doit+faire+au+moins+8+caract%C3%A8res", http.StatusSeeOther)
+		return
+	}
 
-	// Verify current password
+	// Verify current password using bcrypt-aware comparison
 	dbUser, err := h.DB.GetUserByID(user.ID)
-	if err != nil || dbUser.PasswordHash != current {
+	if err != nil || !h.DB.CheckPassword(dbUser.ID, dbUser.PasswordHash, current) {
 		http.Redirect(w, r, "/settings/change-password?error=Mot+de+passe+actuel+incorrect", http.StatusSeeOther)
 		return
 	}
@@ -103,6 +107,11 @@ func (h *SettingsHandler) ChangePasswordPost(w http.ResponseWriter, r *http.Requ
 	if err := h.DB.SetUserPassword(user.ID, newPwd); err != nil {
 		http.Redirect(w, r, "/settings/change-password?error=Erreur+lors+du+changement", http.StatusSeeOther)
 		return
+	}
+
+	// Invalidate all other active sessions — other devices must re-authenticate.
+	if cookie, err := r.Cookie("session"); err == nil {
+		h.DB.DeleteUserSessions(user.ID, cookie.Value)
 	}
 
 	http.Redirect(w, r, "/settings/change-password?success=Mot+de+passe+modifi%C3%A9+avec+succ%C3%A8s", http.StatusSeeOther)

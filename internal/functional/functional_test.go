@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -46,7 +47,7 @@ func newTestEnv(t *testing.T) *testEnv {
 
 	cfg := &config.Config{
 		AdminUser:         "admin",
-		AdminPassword:     "adminpass",
+		AdminPassword:     "adminpass1",
 		DataDir:           dir,
 		DefaultLang:       "en",
 		SecretKey:         "test-secret-32-chars-padded-here!",
@@ -120,13 +121,44 @@ func (e *testEnv) deleteReq(path string) *http.Response {
 	return resp
 }
 
+// putJSON sends a PUT with a JSON body.
+func (e *testEnv) putJSON(path string, payload interface{}) *http.Response {
+	b, _ := json.Marshal(payload)
+	req, _ := http.NewRequest(http.MethodPut, e.url(path), bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := e.client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	return resp
+}
+
+// noFollowClient returns a client that shares the session jar but never follows redirects.
+func (e *testEnv) noFollowClient() *http.Client {
+	return &http.Client{
+		Jar:           e.client.Jar,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+}
+
+// csrfToken derives the CSRF token from the current session cookie in the shared jar.
+func (e *testEnv) csrfToken() string {
+	u, _ := url.Parse(e.srv.URL)
+	for _, c := range e.client.Jar.Cookies(u) {
+		if c.Name == "session" {
+			return middleware.GenerateCSRFToken(e.cfg.SecretKey, c.Value)
+		}
+	}
+	return ""
+}
+
 // drain reads and discards the response body.
 func drain(resp *http.Response) { io.Copy(io.Discard, resp.Body); resp.Body.Close() } //nolint:errcheck
 
 // loginAdmin logs the client in as the seeded admin user.
 func (e *testEnv) loginAdmin(t *testing.T) {
 	t.Helper()
-	resp := e.postForm("/login", "username=admin&password=adminpass")
+	resp := e.postForm("/login", "username=admin&password=adminpass1")
 	drain(resp)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("loginAdmin: expected 200 after redirect, got %d", resp.StatusCode)
@@ -166,13 +198,20 @@ func buildRouter(database *db.DB, cfg *config.Config) http.Handler {
 	}
 
 	healthH := &handlers.HealthHandler{DB: database, StartedAt: time.Now()}
-	authH := &handlers.AuthHandler{DB: database, Config: cfg, Render: renderPage}
+	authH := &handlers.AuthHandler{
+		DB:          database,
+		Config:      cfg,
+		Render:      renderPage,
+		RateLimiter: middleware.NewLoginRateLimiter(),
+	}
 	calH := &handlers.CalendarHandler{DB: database, Render: renderPage, DisableFloorplans: true}
 	adminH := &handlers.AdminHandler{DB: database, Render: renderPage}
 	activityH := &handlers.ActivityHandler{DB: database, Render: renderPage}
 	usersH := &handlers.UsersAdminHandler{DB: database, Render: renderPage}
 	settingsH := &handlers.SettingsHandler{DB: database, Render: renderPage}
 	patH := &handlers.PATHandler{DB: database, Render: renderPage}
+	holidaysH := &handlers.HolidaysHandler{DB: database, Render: renderPage}
+	resetH := &handlers.ResetPasswordHandler{DB: database, Config: cfg, Render: renderPage}
 
 	mux := http.NewServeMux()
 
@@ -180,7 +219,13 @@ func buildRouter(database *db.DB, cfg *config.Config) http.Handler {
 	mux.HandleFunc("GET /health", healthH.Health)
 	mux.Handle("GET /login", middleware.OptionalAuth(database, http.HandlerFunc(authH.LoginPage)))
 	mux.HandleFunc("POST /login", authH.LocalLogin)
-	mux.HandleFunc("GET /logout", authH.Logout)
+	mux.Handle("POST /logout", middleware.ValidateCSRF(cfg.SecretKey)(http.HandlerFunc(authH.Logout)))
+
+	// Reset password (always active in test env; production gates on SMTP)
+	mux.HandleFunc("GET /forgot-password", resetH.ForgotPasswordPage)
+	mux.HandleFunc("POST /forgot-password", resetH.ForgotPasswordPost)
+	mux.HandleFunc("GET /reset-password", resetH.ResetPasswordPage)
+	mux.HandleFunc("POST /reset-password", resetH.ResetPasswordPost)
 
 	// Protected – authenticated users only
 	authMux := http.NewServeMux()
@@ -191,21 +236,38 @@ func buildRouter(database *db.DB, cfg *config.Config) http.Handler {
 	authMux.HandleFunc("GET /api/presences", calH.GetPresencesAPI)
 	authMux.HandleFunc("GET /settings/my-logs", settingsH.MyLogsPage)
 	authMux.HandleFunc("GET /settings/change-password", settingsH.ChangePasswordPage)
-	authMux.HandleFunc("POST /settings/change-password", settingsH.ChangePasswordPost)
+	authMux.Handle("POST /settings/change-password", middleware.ValidateCSRF(cfg.SecretKey)(http.HandlerFunc(settingsH.ChangePasswordPost)))
 	authMux.HandleFunc("GET /settings/tokens", patH.PATPage)
 	authMux.HandleFunc("GET /api/tokens", patH.ListPATs)
 	authMux.HandleFunc("POST /api/tokens", patH.CreatePAT)
 	authMux.HandleFunc("DELETE /api/tokens/{id}", patH.RevokePAT)
+	authMux.HandleFunc("DELETE /api/admin/tokens/{id}", patH.AdminRevokePAT)
 
 	// Admin sub-routes
 	teamMux := http.NewServeMux()
 	teamMux.HandleFunc("GET /api/teams", adminH.ListTeamsAPI)
 	teamMux.HandleFunc("POST /admin/teams", adminH.CreateTeam)
+	teamMux.HandleFunc("PUT /admin/teams/{id}", adminH.UpdateTeam)
 	teamMux.HandleFunc("DELETE /admin/teams/{id}", adminH.DeleteTeam)
+	teamMux.HandleFunc("POST /admin/teams/{id}/members", adminH.AddTeamMember)
+	teamMux.HandleFunc("DELETE /admin/teams/{id}/members/{userId}", adminH.RemoveTeamMember)
+
+	statusMux := http.NewServeMux()
+	statusMux.HandleFunc("POST /admin/statuses", adminH.CreateStatus)
+	statusMux.HandleFunc("PUT /admin/statuses/{id}", adminH.UpdateStatus)
+	statusMux.HandleFunc("DELETE /admin/statuses/{id}", adminH.DeleteStatus)
+
+	holidaysMux := http.NewServeMux()
+	holidaysMux.HandleFunc("POST /admin/holidays", holidaysH.CreateHoliday)
+	holidaysMux.HandleFunc("PUT /admin/holidays/{id}", holidaysH.UpdateHoliday)
+	holidaysMux.HandleFunc("DELETE /admin/holidays/{id}", holidaysH.DeleteHoliday)
 
 	usersMux := http.NewServeMux()
 	usersMux.HandleFunc("GET /admin/users", usersH.UsersPage)
 	usersMux.HandleFunc("POST /admin/users", usersH.CreateUser)
+	usersMux.HandleFunc("PUT /admin/users/{id}", usersH.UpdateUser)
+	usersMux.HandleFunc("PUT /admin/users/{id}/password", usersH.SetPassword)
+	usersMux.HandleFunc("PUT /admin/users/{id}/disabled", usersH.SetDisabled)
 	usersMux.HandleFunc("DELETE /admin/users/{id}", usersH.DeleteUser)
 
 	activityMux := http.NewServeMux()
@@ -215,12 +277,16 @@ func buildRouter(database *db.DB, cfg *config.Config) http.Handler {
 	mux.Handle("/api/teams/", middleware.Auth(database, middleware.RequireRole(models.RoleTeamManager)(teamMux)))
 	mux.Handle("/admin/teams", middleware.Auth(database, middleware.RequireRole(models.RoleTeamManager)(teamMux)))
 	mux.Handle("/admin/teams/", middleware.Auth(database, middleware.RequireRole(models.RoleTeamManager)(teamMux)))
+	mux.Handle("/admin/statuses", middleware.Auth(database, middleware.RequireRole(models.RoleGlobal)(statusMux)))
+	mux.Handle("/admin/statuses/", middleware.Auth(database, middleware.RequireRole(models.RoleGlobal)(statusMux)))
+	mux.Handle("/admin/holidays", middleware.Auth(database, middleware.RequireRole(models.RoleGlobal)(holidaysMux)))
+	mux.Handle("/admin/holidays/", middleware.Auth(database, middleware.RequireRole(models.RoleGlobal)(holidaysMux)))
 	mux.Handle("/admin/users", middleware.Auth(database, middleware.RequireRole(models.RoleGlobal)(usersMux)))
 	mux.Handle("/admin/users/", middleware.Auth(database, middleware.RequireRole(models.RoleGlobal)(usersMux)))
 	mux.Handle("/api/activity", middleware.Auth(database, middleware.RequireRole(models.RoleActivityViewer)(activityMux)))
 	mux.Handle("/", middleware.AuthWithOptions(database, true, authMux))
 
-	return mux
+	return middleware.SecurityHeaders(mux)
 }
 
 // ─── Health ──────────────────────────────────────────────────────────────────
@@ -264,7 +330,7 @@ func TestLogin_ValidCredentials_RedirectsToHome(t *testing.T) {
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	resp, err := noFollowClient.Post(e.url("/login"), "application/x-www-form-urlencoded",
-		strings.NewReader("username=admin&password=adminpass"))
+		strings.NewReader("username=admin&password=adminpass1"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,7 +382,7 @@ func TestLogin_InvalidCredentials_RedirectsToLoginWithError(t *testing.T) {
 
 func TestLogin_LocalUser_ValidCredentials(t *testing.T) {
 	e := newTestEnv(t)
-	// Create a local user with a plain-text password (matches auth.go behaviour)
+	// Create a local user with a plain-text password — bcrypt is now applied by CreateLocalUser
 	_, err := e.db.CreateLocalUser("user@test.com", "Test User", "mypassword")
 	if err != nil {
 		t.Fatalf("create user: %v", err)
@@ -339,14 +405,14 @@ func TestLogin_LocalUser_ValidCredentials(t *testing.T) {
 
 func TestLogin_DisabledUser_Rejected(t *testing.T) {
 	e := newTestEnv(t)
-	id, _ := e.db.CreateLocalUser("disabled@test.com", "Disabled", "pass")
+	id, _ := e.db.CreateLocalUser("disabled@test.com", "Disabled", "password1")
 	e.db.SetUserDisabled(id, true) //nolint:errcheck
 
 	noFollowClient := &http.Client{
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	resp, err := noFollowClient.Post(e.url("/login"), "application/x-www-form-urlencoded",
-		strings.NewReader("username=disabled@test.com&password=pass"))
+		strings.NewReader("username=disabled@test.com&password=password1"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,12 +437,17 @@ func TestLogout_ClearsSessionAndRedirects(t *testing.T) {
 		t.Fatalf("expected 200 on / after login, got %d", resp.StatusCode)
 	}
 
-	// Logout
+	// Logout via POST with CSRF token
 	noFollowClient := &http.Client{
 		Jar:           e.client.Jar,
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
-	resp2, err := noFollowClient.Get(e.url("/logout"))
+	csrf := e.csrfToken()
+	logoutForm := url.Values{}
+	logoutForm.Set("csrf_token", csrf)
+	logoutReq, _ := http.NewRequest("POST", e.url("/logout"), strings.NewReader(logoutForm.Encode()))
+	logoutReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp2, err := noFollowClient.Do(logoutReq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -435,7 +506,7 @@ func TestAdminRoutes_WithoutAdminRole_Forbidden(t *testing.T) {
 	e := newTestEnv(t)
 
 	// Create a basic user with no admin role
-	id, err := e.db.CreateLocalUser("basic@test.com", "Basic User", "basicpass")
+	id, err := e.db.CreateLocalUser("basic@test.com", "Basic User", "basicpass1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -554,8 +625,8 @@ func TestSetPresences_BasicUserEditingOtherUser_Forbidden(t *testing.T) {
 	e := newTestEnv(t)
 
 	// Create a basic user
-	otherID, _ := e.db.CreateLocalUser("other@test.com", "Other", "pass")
-	basicID, _ := e.db.CreateLocalUser("basic@test.com", "Basic", "pass")
+	otherID, _ := e.db.CreateLocalUser("other@test.com", "Other", "password1")
+	basicID, _ := e.db.CreateLocalUser("basic@test.com", "Basic", "password2")
 	e.injectSession(t, basicID)
 
 	statuses, _ := e.db.ListStatuses()
@@ -769,7 +840,7 @@ func TestCreatePAT_AsGlobalUser_ReturnsToken(t *testing.T) {
 
 func TestCreatePAT_BasicUser_Forbidden(t *testing.T) {
 	e := newTestEnv(t)
-	id, _ := e.db.CreateLocalUser("basic2@test.com", "Basic", "pass")
+	id, _ := e.db.CreateLocalUser("basic2@test.com", "Basic", "password1")
 	e.injectSession(t, id)
 
 	payload := map[string]interface{}{
@@ -912,6 +983,452 @@ func TestBearerPAT_ValidToken_AccessesProtectedRoute(t *testing.T) {
 	// Should not be 401 – even if params cause 400 the auth itself passed
 	if resp2.StatusCode == http.StatusUnauthorized {
 		t.Error("expected PAT authentication to succeed (not 401)")
+	}
+}
+
+// ─── Settings: ChangePassword ─────────────────────────────────────────────────
+
+func TestChangePasswordPost_ValidChange_Redirects(t *testing.T) {
+	e := newTestEnv(t)
+	id, _ := e.db.CreateLocalUser("local@test.com", "Local", "oldpass1")
+	e.injectSession(t, id)
+	csrf := e.csrfToken()
+
+	resp, _ := e.noFollowClient().Post(e.url("/settings/change-password"),
+		"application/x-www-form-urlencoded",
+		strings.NewReader("current_password=oldpass1&new_password=newpass12&confirm_password=newpass12&csrf_token="+csrf))
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Errorf("expected 303, got %d", resp.StatusCode)
+	}
+	if !strings.Contains(resp.Header.Get("Location"), "success") {
+		t.Errorf("expected success in redirect, got %q", resp.Header.Get("Location"))
+	}
+}
+
+func TestChangePasswordPost_WrongCurrent_RedirectsWithError(t *testing.T) {
+	e := newTestEnv(t)
+	id, _ := e.db.CreateLocalUser("local2@test.com", "Local2", "correctpass")
+	e.injectSession(t, id)
+	csrf := e.csrfToken()
+
+	resp, _ := e.noFollowClient().Post(e.url("/settings/change-password"),
+		"application/x-www-form-urlencoded",
+		strings.NewReader("current_password=wrongpass&new_password=newpass12&confirm_password=newpass12&csrf_token="+csrf))
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Errorf("expected 303, got %d", resp.StatusCode)
+	}
+	if !strings.Contains(resp.Header.Get("Location"), "error") {
+		t.Errorf("expected error in redirect, got %q", resp.Header.Get("Location"))
+	}
+}
+
+func TestChangePasswordPost_TooShort_RedirectsWithError(t *testing.T) {
+	e := newTestEnv(t)
+	id, _ := e.db.CreateLocalUser("local3@test.com", "Local3", "oldpass1")
+	e.injectSession(t, id)
+	csrf := e.csrfToken()
+
+	resp, _ := e.noFollowClient().Post(e.url("/settings/change-password"),
+		"application/x-www-form-urlencoded",
+		strings.NewReader("current_password=oldpass1&new_password=short&confirm_password=short&csrf_token="+csrf))
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Errorf("expected 303, got %d", resp.StatusCode)
+	}
+	if !strings.Contains(resp.Header.Get("Location"), "error") {
+		t.Errorf("expected error in redirect, got %q", resp.Header.Get("Location"))
+	}
+}
+
+func TestChangePasswordPost_Mismatch_RedirectsWithError(t *testing.T) {
+	e := newTestEnv(t)
+	id, _ := e.db.CreateLocalUser("local4@test.com", "Local4", "oldpass1")
+	e.injectSession(t, id)
+	csrf := e.csrfToken()
+
+	resp, _ := e.noFollowClient().Post(e.url("/settings/change-password"),
+		"application/x-www-form-urlencoded",
+		strings.NewReader("current_password=oldpass1&new_password=newpass12&confirm_password=different1&csrf_token="+csrf))
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Errorf("expected 303, got %d", resp.StatusCode)
+	}
+	if !strings.Contains(resp.Header.Get("Location"), "error") {
+		t.Errorf("expected error in redirect, got %q", resp.Header.Get("Location"))
+	}
+}
+
+// ─── Reset Password ───────────────────────────────────────────────────────────
+
+func TestForgotPassword_EmptyEmail_ReturnsSentPage(t *testing.T) {
+	e := newTestEnv(t)
+	resp := e.postForm("/forgot-password", "email=")
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestForgotPassword_UnknownEmail_ReturnsSentPage(t *testing.T) {
+	e := newTestEnv(t)
+	resp := e.postForm("/forgot-password", "email=nobody%40example.com")
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 (no enumeration), got %d", resp.StatusCode)
+	}
+}
+
+func TestResetPassword_InvalidToken_RendersErrorPage(t *testing.T) {
+	e := newTestEnv(t)
+	resp := e.postForm("/reset-password", "token=invalid&password=newpass12&confirm=newpass12")
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 error page, got %d", resp.StatusCode)
+	}
+}
+
+func TestResetPassword_ValidToken_SetsNewPassword(t *testing.T) {
+	e := newTestEnv(t)
+	_, err := e.db.CreateLocalUser("reset@test.com", "Reset User", "oldpass1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawToken, err := e.db.CreatePasswordResetToken("reset@test.com")
+	if err != nil || rawToken == "" {
+		t.Fatalf("create reset token: err=%v token=%q", err, rawToken)
+	}
+	resp := e.postForm("/reset-password",
+		"token="+rawToken+"&password=newpass12&confirm=newpass12")
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 success page, got %d", resp.StatusCode)
+	}
+}
+
+func TestResetPassword_TooShortPassword_RendersError(t *testing.T) {
+	e := newTestEnv(t)
+	_, _ = e.db.CreateLocalUser("reset2@test.com", "Reset2", "oldpass1")
+	rawToken, _ := e.db.CreatePasswordResetToken("reset2@test.com")
+	resp := e.postForm("/reset-password",
+		"token="+rawToken+"&password=short&confirm=short")
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 error page, got %d", resp.StatusCode)
+	}
+}
+
+// ─── Admin: Teams CRUD ────────────────────────────────────────────────────────
+
+func TestDeleteTeam_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	id, _ := e.db.CreateTeam("ToDelete")
+	resp := e.deleteReq("/admin/teams/" + i64str(id))
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestUpdateTeam_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	id, _ := e.db.CreateTeam("OldName")
+	resp := e.putJSON("/admin/teams/"+i64str(id), map[string]string{"name": "NewName"})
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestAddTeamMember_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	teamID, _ := e.db.CreateTeam("TeamWithMember")
+	userID, _ := e.db.CreateLocalUser("member@test.com", "Member", "memberpass1")
+	resp := e.postJSON("/admin/teams/"+i64str(teamID)+"/members",
+		map[string]int64{"user_id": userID})
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestRemoveTeamMember_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	teamID, _ := e.db.CreateTeam("TeamRemove")
+	userID, _ := e.db.CreateLocalUser("rmember@test.com", "RMember", "rmemberpass1")
+	e.db.AddTeamMember(teamID, userID) //nolint:errcheck
+	resp := e.deleteReq("/admin/teams/" + i64str(teamID) + "/members/" + i64str(userID))
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+// ─── Admin: Statuses CRUD ─────────────────────────────────────────────────────
+
+func TestCreateStatus_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	resp := e.postJSON("/admin/statuses", map[string]interface{}{
+		"name": "Remote", "color": "#ff0000", "billable": false, "on_site": false, "sort_order": 10,
+	})
+	var result map[string]interface{}
+	mustDecodeJSON(t, resp, &result)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateStatus_MissingFields_Returns400(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	resp := e.postJSON("/admin/statuses", map[string]interface{}{"name": ""})
+	defer drain(resp)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestUpdateStatus_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	statuses, _ := e.db.ListStatuses()
+	id := statuses[0].ID
+	resp := e.putJSON("/admin/statuses/"+i64str(id), map[string]interface{}{
+		"name": "UpdatedStatus", "color": "#00ff00",
+	})
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestDeleteStatus_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	// Create via API to get the ID
+	createResp := e.postJSON("/admin/statuses", map[string]interface{}{
+		"name": "ToDeleteStatus", "color": "#aabbcc",
+	})
+	var created map[string]interface{}
+	mustDecodeJSON(t, createResp, &created)
+	id := int64(created["id"].(float64))
+
+	resp := e.deleteReq("/admin/statuses/" + i64str(id))
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+// ─── Admin: Holidays CRUD ─────────────────────────────────────────────────────
+
+func TestCreateHoliday_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	resp := e.postJSON("/admin/holidays", map[string]interface{}{
+		"date": "2026-05-01", "name": "Labour Day", "allow_imputed": false,
+	})
+	var result map[string]interface{}
+	mustDecodeJSON(t, resp, &result)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateHoliday_MissingFields_Returns400(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	resp := e.postJSON("/admin/holidays", map[string]interface{}{"date": ""})
+	defer drain(resp)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestUpdateHoliday_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	id, _ := e.db.CreateHoliday("2026-07-14", "Bastille Day", false)
+	resp := e.putJSON("/admin/holidays/"+i64str(id), map[string]interface{}{
+		"date": "2026-07-14", "name": "Bastille Day Updated", "allow_imputed": true,
+	})
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestDeleteHoliday_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	id, _ := e.db.CreateHoliday("2026-08-15", "Assumption Day", false)
+	resp := e.deleteReq("/admin/holidays/" + i64str(id))
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+// ─── Admin: Users CRUD ────────────────────────────────────────────────────────
+
+func TestUpdateUser_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	id, _ := e.db.CreateLocalUser("upd@test.com", "Old Name", "password1")
+	resp := e.putJSON("/admin/users/"+i64str(id),
+		map[string]string{"email": "upd@test.com", "name": "New Name"})
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestSetPassword_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	id, _ := e.db.CreateLocalUser("setpwd@test.com", "SetPwd", "password1")
+	resp := e.putJSON("/admin/users/"+i64str(id)+"/password",
+		map[string]string{"password": "newpassword1"})
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestSetPassword_EmptyPassword_Returns400(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	id, _ := e.db.CreateLocalUser("setpwd2@test.com", "SetPwd2", "password1")
+	resp := e.putJSON("/admin/users/"+i64str(id)+"/password",
+		map[string]string{"password": ""})
+	defer drain(resp)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestSetDisabled_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	id, _ := e.db.CreateLocalUser("disable@test.com", "Disable", "password1")
+	resp := e.putJSON("/admin/users/"+i64str(id)+"/disabled",
+		map[string]bool{"disabled": true})
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestSetDisabled_Self_Returns400(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	adminUser, _ := e.db.GetUserByEmail("admin")
+	resp := e.putJSON("/admin/users/"+i64str(adminUser.ID)+"/disabled",
+		map[string]bool{"disabled": true})
+	defer drain(resp)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400 when disabling self, got %d", resp.StatusCode)
+	}
+}
+
+func TestDeleteUser_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	id, _ := e.db.CreateLocalUser("todelete@test.com", "ToDelete", "password1")
+	resp := e.deleteReq("/admin/users/" + i64str(id))
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestDeleteUser_Self_Returns400(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	adminUser, _ := e.db.GetUserByEmail("admin")
+	resp := e.deleteReq("/admin/users/" + i64str(adminUser.ID))
+	defer drain(resp)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400 when deleting self, got %d", resp.StatusCode)
+	}
+}
+
+// ─── PAT: List ────────────────────────────────────────────────────────────────
+
+func TestListPATs_AsAdmin_ReturnsJSON(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	resp := e.get("/api/tokens")
+	var result interface{}
+	mustDecodeJSON(t, resp, &result)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+// ─── Rate Limiter ─────────────────────────────────────────────────────────────
+
+func TestRateLimiter_BlocksAfterMaxFailures(t *testing.T) {
+	e := newTestEnv(t)
+	noFollow := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	badLogin := func() *http.Response {
+		resp, err := noFollow.Post(e.url("/login"),
+			"application/x-www-form-urlencoded",
+			strings.NewReader("username=admin&password=wrongpassword"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+	// Exhaust the 5-failure budget
+	for i := 0; i < 5; i++ {
+		drain(badLogin())
+	}
+	// Next attempt must be rate-limited
+	resp := badLogin()
+	defer drain(resp)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("expected 303 redirect, got %d", resp.StatusCode)
+	}
+	loc := resp.Header.Get("Location")
+	if !strings.Contains(loc, "many") && !strings.Contains(loc, "Many") {
+		t.Errorf("expected rate-limit redirect, got location %q", loc)
+	}
+}
+
+// ─── Security Headers ─────────────────────────────────────────────────────────
+
+func TestSecurityHeaders_PresentOnResponses(t *testing.T) {
+	e := newTestEnv(t)
+	resp := e.get("/health")
+	defer drain(resp)
+
+	checks := map[string]string{
+		"X-Frame-Options":        "DENY",
+		"X-Content-Type-Options": "nosniff",
+	}
+	for header, want := range checks {
+		if got := resp.Header.Get(header); got != want {
+			t.Errorf("%s: want %q, got %q", header, want, got)
+		}
+	}
+	if csp := resp.Header.Get("Content-Security-Policy"); csp == "" {
+		t.Error("Content-Security-Policy header missing")
+	}
+	if !strings.Contains(resp.Header.Get("Content-Security-Policy"), "frame-ancestors") {
+		t.Error("CSP missing frame-ancestors directive")
 	}
 }
 

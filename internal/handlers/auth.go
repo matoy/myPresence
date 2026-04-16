@@ -26,10 +26,11 @@ import (
 
 // AuthHandler handles authentication endpoints.
 type AuthHandler struct {
-	DB     *db.DB
-	Config *config.Config
-	Render func(w http.ResponseWriter, r *http.Request, page string, data interface{})
-	SP     *saml.ServiceProvider
+	DB          *db.DB
+	Config      *config.Config
+	Render      func(w http.ResponseWriter, r *http.Request, page string, data interface{})
+	SP          *saml.ServiceProvider
+	RateLimiter *middleware.LoginRateLimiter
 	// pendingSAMLRequests stores in-flight SAML request IDs (id -> expiry time).
 	// Used to validate InResponseTo in the ACS response.
 	pendingSAMLRequests sync.Map
@@ -121,30 +122,49 @@ func (h *AuthHandler) LoginPage(w http.ResponseWriter, r *http.Request) {
 
 // LocalLogin handles local admin login.
 func (h *AuthHandler) LocalLogin(w http.ResponseWriter, r *http.Request) {
+	// Rate limit: block IPs with too many recent failures
+	if h.RateLimiter != nil && !h.RateLimiter.Allow(r) {
+		metrics.AuthLoginsTotal.WithLabelValues("local", "failure").Inc()
+		http.Redirect(w, r, "/login?error=Too+many+attempts%2C+please+wait", http.StatusSeeOther)
+		return
+	}
+
 	username := r.FormValue("username")
 	password := r.FormValue("password")
 
+	recordFailure := func() {
+		if h.RateLimiter != nil {
+			h.RateLimiter.RecordFailure(r)
+		}
+		metrics.AuthLoginsTotal.WithLabelValues("local", "failure").Inc()
+	}
+
 	var userID int64
 
-	if username == h.Config.AdminUser && password == h.Config.AdminPassword {
-		// Hardcoded admin credentials
+	if username == h.Config.AdminUser {
+		// Admin credential check (plain-text against config value)
+		if password != h.Config.AdminPassword {
+			recordFailure()
+			http.Redirect(w, r, "/login?error=Invalid+credentials", http.StatusSeeOther)
+			return
+		}
 		user, err := h.DB.GetUserByEmail(username)
 		if err != nil {
-			metrics.AuthLoginsTotal.WithLabelValues("local", "failure").Inc()
+			recordFailure()
 			http.Redirect(w, r, "/login?error=Internal+error", http.StatusSeeOther)
 			return
 		}
 		userID = user.ID
 	} else {
-		// Try DB local user
+		// Try DB local user with bcrypt-aware comparison
 		user, err := h.DB.GetUserByEmail(username)
-		if err != nil || user.PasswordHash == "" || user.PasswordHash != password {
-			metrics.AuthLoginsTotal.WithLabelValues("local", "failure").Inc()
+		if err != nil || !h.DB.CheckPassword(user.ID, user.PasswordHash, password) {
+			recordFailure()
 			http.Redirect(w, r, "/login?error=Invalid+credentials", http.StatusSeeOther)
 			return
 		}
 		if user.Disabled {
-			metrics.AuthLoginsTotal.WithLabelValues("local", "failure").Inc()
+			recordFailure()
 			http.Redirect(w, r, "/login?error=Account+disabled", http.StatusSeeOther)
 			return
 		}
@@ -153,11 +173,14 @@ func (h *AuthHandler) LocalLogin(w http.ResponseWriter, r *http.Request) {
 
 	token, err := h.DB.CreateSession(userID)
 	if err != nil {
-		metrics.AuthLoginsTotal.WithLabelValues("local", "failure").Inc()
+		recordFailure()
 		http.Redirect(w, r, "/login?error=Internal+error", http.StatusSeeOther)
 		return
 	}
 
+	if h.RateLimiter != nil {
+		h.RateLimiter.Reset(r)
+	}
 	metrics.AuthLoginsTotal.WithLabelValues("local", "success").Inc()
 
 	http.SetCookie(w, &http.Cookie{
@@ -165,6 +188,7 @@ func (h *AuthHandler) LocalLogin(w http.ResponseWriter, r *http.Request) {
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   86400 * 30,
 	})

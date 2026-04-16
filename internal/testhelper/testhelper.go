@@ -192,7 +192,7 @@ func (e *Env) GetAdminUser(t *testing.T) *models.User {
 // handler itself calls testhelper.GetUser() (not middleware.GetUser()).
 // For integration tests that run through the real middleware, prefer InjectUser.
 func WithUserInContext(r *http.Request, u *models.User) *http.Request {
-	ctx := context.WithValue(r.Context(), ctxTestUserKey, u)
+	ctx := context.WithValue(r.Context(), ctxTestUserKey{}, u)
 	return r.WithContext(ctx)
 }
 

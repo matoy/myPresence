@@ -137,7 +137,7 @@ type Presence struct {
 	ID       int64  `json:"id"`
 	UserID   int64  `json:"user_id"`
 	Date     string `json:"date"`
-	Half     string `json:"half"`      // "full", "AM", or "PM"
+	Half     string `json:"half"` // "full", "AM", or "PM"
 	StatusID int64  `json:"status_id"`
 }
 
@@ -161,7 +161,7 @@ type DayInfo struct {
 // Holiday represents a public holiday.
 type Holiday struct {
 	ID           int64  `json:"id"`
-	Date         string `json:"date"`         // YYYY-MM-DD
+	Date         string `json:"date"` // YYYY-MM-DD
 	Name         string `json:"name"`
 	AllowImputed bool   `json:"allow_imputed"` // allow presences to be set on this day
 }
@@ -250,11 +250,11 @@ type PersonalAccessToken struct {
 
 // PageData is the common data passed to all templates.
 type PageData struct {
-	Config      interface{}
-	User        *User
-	Page        string
-	Flash       string
-	Data        interface{}
+	Config            interface{}
+	User              *User
+	Page              string
+	Flash             string
+	Data              interface{}
 	SAMLEnabled       bool
 	SMTPEnabled       bool
 	HideFooter        bool
@@ -265,4 +265,6 @@ type PageData struct {
 	T              map[string]string // translation map for the active language
 	Lang           string            // active language code ("en", "fr", "de", "es")
 	SupportedLangs interface{}       // []i18n.LangInfo — passed from main.go to avoid import cycle
+	// CSRF
+	CSRFToken string // HMAC-SHA256(secretKey, sessionToken); empty for unauthenticated pages
 }

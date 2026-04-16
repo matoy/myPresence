@@ -147,10 +147,12 @@
                                 </form>
                             </div>
                             <div class="border-t border-gray-100 my-1"></div>
-                            <a href="/logout"
-                               class="flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition">
-                                {{index .T "nav.logout"}}
-                            </a>
+                            <form method="POST" action="/logout">
+                                <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                                <button type="submit" class="flex items-center gap-2.5 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition w-full text-left">
+                                    {{index .T "nav.logout"}}
+                                </button>
+                            </form>
                         </div>
                     </div>
                 </div>
@@ -214,7 +216,10 @@
                             </select>
                         </form>
                     </div>
-                    <a href="/logout" class="block text-white/60 hover:text-white px-3 py-2 text-sm">{{index .T "nav.logout"}}</a>
+                    <form method="POST" action="/logout">
+                        <input type="hidden" name="csrf_token" value="{{$.CSRFToken}}">
+                        <button type="submit" class="block text-white/60 hover:text-white px-3 py-2 text-sm w-full text-left">{{index .T "nav.logout"}}</button>
+                    </form>
                 </div>
             </div>
         </div>

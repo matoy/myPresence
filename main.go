@@ -1,12 +1,14 @@
 package main
 
 import (
+	"crypto/subtle"
 	"embed"
 	"encoding/json"
 	"html/template"
 	"io/fs"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +36,10 @@ var apiDocContent []byte
 
 func main() {
 	cfg := config.Load()
+
+	if cfg.SecretKey == "change-me-in-production-use-random-32-chars" {
+		log.Println("WARNING: SECRET_KEY is set to its default value. Set a strong random secret in production.")
+	}
 
 	// Ensure data directory exists
 	os.MkdirAll(cfg.DataDir, 0755)
@@ -130,8 +136,8 @@ func main() {
 			return d
 		},
 		"intToInt64": func(i int) int64 { return int64(i) },
-		"upper": strings.ToUpper,
-		"percent": tmplPercent,
+		"upper":      strings.ToUpper,
+		"percent":    tmplPercent,
 		"hasRole": func(user *models.User, role string) bool {
 			if user == nil {
 				return false
@@ -171,6 +177,10 @@ func main() {
 			}
 		}
 
+		var csrfToken string
+		if cookie, err := r.Cookie("session"); err == nil {
+			csrfToken = middleware.GenerateCSRFToken(cfg.SecretKey, cookie.Value)
+		}
 		pd := models.PageData{
 			Config: map[string]string{
 				"AppName":        cfg.AppName,
@@ -193,6 +203,7 @@ func main() {
 			T:                 i18n.T(lang),
 			Lang:              lang,
 			SupportedLangs:    i18n.Supported,
+			CSRFToken:         csrfToken,
 		}
 		// Add logo flag to config map
 		configMap := pd.Config.(map[string]string)
@@ -213,7 +224,12 @@ func main() {
 
 	// Initialize handlers
 	healthHandler := &handlers.HealthHandler{DB: database, StartedAt: time.Now()}
-	authHandler := &handlers.AuthHandler{DB: database, Config: cfg, Render: renderPage}
+	authHandler := &handlers.AuthHandler{
+		DB:          database,
+		Config:      cfg,
+		Render:      renderPage,
+		RateLimiter: middleware.NewLoginRateLimiter(),
+	}
 	calHandler := &handlers.CalendarHandler{DB: database, Render: renderPage, DisableFloorplans: cfg.DisableFloorplans}
 	adminHandler := &handlers.AdminHandler{DB: database, Render: renderPage}
 	activityHandler := &handlers.ActivityHandler{DB: database, Render: renderPage}
@@ -312,10 +328,7 @@ func main() {
 			return
 		}
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if token == "" {
-			token = r.URL.Query().Get("token")
-		}
-		if token != cfg.MetricsToken {
+		if subtle.ConstantTimeCompare([]byte(token), []byte(cfg.MetricsToken)) != 1 {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="mypresence-metrics"`)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
@@ -342,12 +355,19 @@ func main() {
 			Path:     "/",
 			MaxAge:   365 * 24 * 3600,
 			SameSite: http.SameSiteLaxMode,
+			HttpOnly: true,
 		})
-		ref := r.Header.Get("Referer")
-		if ref == "" {
-			ref = "/"
+		// Prevent open redirect: only allow same-origin redirects
+		target := "/"
+		if ref := r.Header.Get("Referer"); ref != "" {
+			if u, err := url.Parse(ref); err == nil {
+				// Discard scheme/host — use only path+query to stay on same origin
+				if p := u.RequestURI(); strings.HasPrefix(p, "/") {
+					target = p
+				}
+			}
 		}
-		http.Redirect(w, r, ref, http.StatusSeeOther)
+		http.Redirect(w, r, target, http.StatusSeeOther)
 	})
 
 	// API documentation (public, disabled when DISABLE_API=true)
@@ -362,7 +382,7 @@ func main() {
 	// Auth routes (public)
 	mux.Handle("GET /login", middleware.OptionalAuth(database, http.HandlerFunc(authHandler.LoginPage)))
 	mux.HandleFunc("POST /login", authHandler.LocalLogin)
-	mux.HandleFunc("GET /logout", authHandler.Logout)
+	mux.Handle("POST /logout", middleware.ValidateCSRF(cfg.SecretKey)(http.HandlerFunc(authHandler.Logout)))
 
 	// Password reset routes (public, only active when SMTP is configured)
 	if cfg.SMTPURL != "" {
@@ -401,7 +421,7 @@ func main() {
 	// Personal settings
 	authMux.HandleFunc("GET /settings/my-logs", settingsHandler.MyLogsPage)
 	authMux.HandleFunc("GET /settings/change-password", settingsHandler.ChangePasswordPage)
-	authMux.HandleFunc("POST /settings/change-password", settingsHandler.ChangePasswordPost)
+	authMux.Handle("POST /settings/change-password", middleware.ValidateCSRF(cfg.SecretKey)(http.HandlerFunc(settingsHandler.ChangePasswordPost)))
 
 	// Floorplan user routes
 	if !cfg.DisableFloorplans {
@@ -494,14 +514,21 @@ func main() {
 	// Start server
 	addr := ":" + cfg.Port
 	log.Printf("🚀 %s démarré sur http://localhost%s", cfg.AppName, addr)
-	log.Printf("   Admin: %s / %s", cfg.AdminUser, cfg.AdminPassword)
+	log.Printf("   Admin: %s", cfg.AdminUser)
 	if cfg.SAMLEnabled {
 		log.Printf("   SAML SSO: activé (Entity ID: %s)", cfg.SAMLEntityID)
 	}
 	if cfg.MetricsToken != "" {
 		log.Printf("   Métriques Prometheus: http://localhost%s/metrics", addr)
 	}
-	if err := http.ListenAndServe(addr, metrics.Instrument(mux)); err != nil {
+	srv := &http.Server{
+		Addr:         addr,
+		Handler:      middleware.SecurityHeaders(metrics.Instrument(mux)),
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  120 * time.Second,
+	}
+	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }

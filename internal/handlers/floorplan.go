@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -271,9 +272,11 @@ func (h *FloorplanHandler) DeleteFloorplan(w http.ResponseWriter, r *http.Reques
 
 // UploadFloorplanImage handles POST /admin/floorplans/{id}/image.
 func (h *FloorplanHandler) UploadFloorplanImage(w http.ResponseWriter, r *http.Request) {
+	const maxUploadBytes = 10 << 20 // 10 MB
+
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 
-	r.ParseMultipartForm(10 << 20) // 10 MB
+	r.ParseMultipartForm(maxUploadBytes) //nolint:errcheck
 	file, header, err := r.FormFile("image")
 	if err != nil {
 		jsonError(w, "Fichier manquant", http.StatusBadRequest)
@@ -283,14 +286,33 @@ func (h *FloorplanHandler) UploadFloorplanImage(w http.ResponseWriter, r *http.R
 
 	// Validate extension
 	ext := strings.ToLower(filepath.Ext(header.Filename))
-	if ext != ".png" && ext != ".jpg" && ext != ".jpeg" && ext != ".gif" && ext != ".webp" {
+	allowedExts := map[string]bool{".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true}
+	if !allowedExts[ext] {
 		jsonError(w, "Format non supporté (PNG, JPG, GIF, WEBP)", http.StatusBadRequest)
+		return
+	}
+
+	// Read up to 512 bytes to detect real content type (defeats extension spoofing)
+	sniff := make([]byte, 512)
+	n, _ := file.Read(sniff)
+	detectedType := http.DetectContentType(sniff[:n])
+	allowedTypes := map[string]bool{
+		"image/png":  true,
+		"image/jpeg": true,
+		"image/gif":  true,
+		"image/webp": true,
+	}
+	// http.DetectContentType may return "image/png", "image/jpeg", "image/gif",
+	// "image/webp" or "application/octet-stream" for unknown binary data.
+	base := strings.SplitN(detectedType, ";", 2)[0]
+	if !allowedTypes[base] {
+		jsonError(w, "Contenu de fichier invalide (image uniquement)", http.StatusBadRequest)
 		return
 	}
 
 	// Delete old image
 	if fp, err := h.DB.GetFloorplan(id); err == nil && fp.ImagePath != "" {
-		os.Remove(filepath.Join(h.DataDir, fp.ImagePath))
+		os.Remove(filepath.Join(h.DataDir, fp.ImagePath)) //nolint:errcheck
 	}
 
 	filename := fmt.Sprintf("floorplan_%d%s", id, ext)
@@ -300,9 +322,16 @@ func (h *FloorplanHandler) UploadFloorplanImage(w http.ResponseWriter, r *http.R
 		return
 	}
 	defer dst.Close()
-	io.Copy(dst, file)
 
-	h.DB.SetFloorplanImage(id, filename)
+	// Reconstruct full reader: prepend the already-read sniff bytes, then limit total size
+	fullReader := io.LimitReader(io.MultiReader(bytes.NewReader(sniff[:n]), file), maxUploadBytes)
+	if _, err := io.Copy(dst, fullReader); err != nil {
+		os.Remove(filepath.Join(h.DataDir, filename)) //nolint:errcheck
+		jsonError(w, "Erreur lors de l'écriture du fichier", http.StatusInternalServerError)
+		return
+	}
+
+	h.DB.SetFloorplanImage(id, filename) //nolint:errcheck
 	jsonOK(w, map[string]string{"status": "ok", "image_path": filename})
 }
 

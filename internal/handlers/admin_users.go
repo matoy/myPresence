@@ -106,6 +106,10 @@ func (h *UsersAdminHandler) SetPassword(w http.ResponseWriter, r *http.Request) 
 		jsonError(w, "Password is required", http.StatusBadRequest)
 		return
 	}
+	if len(req.Password) < 8 {
+		jsonError(w, "Password must be at least 8 characters", http.StatusBadRequest)
+		return
+	}
 	if err := h.DB.SetUserPassword(id, req.Password); err != nil {
 		jsonError(w, "Error updating password", http.StatusInternalServerError)
 		return

@@ -43,7 +43,7 @@ func (h *ResetPasswordHandler) ForgotPasswordPost(w http.ResponseWriter, r *http
 
 	rawToken, err := h.DB.CreatePasswordResetToken(email)
 	if err != nil {
-		log.Printf("CreatePasswordResetToken(%s): %v", email, err)
+		log.Printf("CreatePasswordResetToken: internal error")
 		renderSent()
 		return
 	}
@@ -103,6 +103,10 @@ func (h *ResetPasswordHandler) ResetPasswordPost(w http.ResponseWriter, r *http.
 		renderErr("fields_required")
 		return
 	}
+	if len(password) < 8 {
+		renderErr("password_too_short")
+		return
+	}
 	if password != confirm {
 		renderErr("passwords_mismatch")
 		return
@@ -118,6 +122,9 @@ func (h *ResetPasswordHandler) ResetPasswordPost(w http.ResponseWriter, r *http.
 		renderErr("server_error")
 		return
 	}
+
+	// Invalidate all sessions — user must log in again with the new password.
+	h.DB.DeleteUserSessions(user.ID, "")
 
 	h.Render(w, r, "reset_password", map[string]interface{}{
 		"Token": "",
