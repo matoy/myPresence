@@ -34,7 +34,7 @@ services:
       # Data storage directory (inside the container)
       - DATA_DIR=/data
 
-      # Default UI language: en, fr, de, es (users can override via the language menu)
+      # Default UI language: en, fr, de, es, it (users can override via the language menu)
       - DEFAULT_LANG=en
 
       # Secret key used to sign session cookies
