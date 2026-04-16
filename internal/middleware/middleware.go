@@ -30,7 +30,7 @@ func AuthWithOptions(database *db.DB, bearerEnabled bool, next http.Handler) htt
 				if err != nil {
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusUnauthorized)
-					w.Write([]byte(`{"error":"token invalide ou expiré"}`))
+					w.Write([]byte(`{"error":"token invalide ou expiré"}`)) //nolint:errcheck
 					return
 				}
 				ctx := context.WithValue(r.Context(), userContextKey, user)

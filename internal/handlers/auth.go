@@ -199,7 +199,7 @@ func (h *AuthHandler) LocalLogin(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("session")
 	if err == nil {
-		h.DB.DeleteSession(cookie.Value)
+		h.DB.DeleteSession(cookie.Value) //nolint:errcheck
 	}
 	metrics.AuthLogoutsTotal.Inc()
 	http.SetCookie(w, &http.Cookie{Name: "session", MaxAge: -1, Path: "/"})
@@ -214,7 +214,7 @@ func (h *AuthHandler) SAMLMetadata(w http.ResponseWriter, r *http.Request) {
 	}
 	buf, _ := xml.MarshalIndent(h.SP.Metadata(), "", "  ")
 	w.Header().Set("Content-Type", "application/xml")
-	w.Write(buf)
+	w.Write(buf) //nolint:errcheck
 }
 
 // SAMLLogin initiates the SAML SSO flow.

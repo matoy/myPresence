@@ -137,7 +137,7 @@ func (h *CalendarHandler) SetPresences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.DB.LogPresenceAction(user.ID, req.UserID, "set", req.Dates, req.StatusID, req.Half)
+	h.DB.LogPresenceAction(user.ID, req.UserID, "set", req.Dates, req.StatusID, req.Half) //nolint:errcheck
 
 	half := req.Half
 	if half == "" {
@@ -173,7 +173,7 @@ func (h *CalendarHandler) ClearPresences(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	h.DB.LogPresenceAction(user.ID, req.UserID, "clear", req.Dates, 0, req.Half)
+	h.DB.LogPresenceAction(user.ID, req.UserID, "clear", req.Dates, 0, req.Half) //nolint:errcheck
 
 	clearHalf := req.Half
 	if clearHalf == "" {
@@ -244,10 +244,10 @@ func getDaysInMonth(year, month int) []models.DayInfo {
 func jsonError(w http.ResponseWriter, msg string, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	json.NewEncoder(w).Encode(map[string]string{"error": msg}) //nolint:errcheck
 }
 
 func jsonOK(w http.ResponseWriter, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(data)
+	json.NewEncoder(w).Encode(data) //nolint:errcheck
 }

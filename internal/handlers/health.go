@@ -15,10 +15,10 @@ type HealthHandler struct {
 }
 
 type healthResponse struct {
-	Status   string            `json:"status"`
-	Uptime   string            `json:"uptime"`
-	Checks   map[string]string `json:"checks"`
-	Time     string            `json:"time"`
+	Status string            `json:"status"`
+	Uptime string            `json:"uptime"`
+	Checks map[string]string `json:"checks"`
+	Time   string            `json:"time"`
 }
 
 // Health responds with application and dependency health status.
@@ -54,5 +54,5 @@ func (h *HealthHandler) Health(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(resp)
+	json.NewEncoder(w).Encode(resp) //nolint:errcheck
 }

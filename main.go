@@ -42,7 +42,9 @@ func main() {
 	}
 
 	// Ensure data directory exists
-	os.MkdirAll(cfg.DataDir, 0755)
+	if err := os.MkdirAll(cfg.DataDir, 0755); err != nil {
+		log.Fatalf("Failed to create data directory: %v", err)
+	}
 
 	// Open database
 	database, err := db.Open(cfg.DataDir)
@@ -375,7 +377,7 @@ func main() {
 		mux.HandleFunc("GET /api/docs", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.Header().Set("Cache-Control", "public, max-age=3600")
-			w.Write(apiDocContent)
+			w.Write(apiDocContent) //nolint:errcheck
 		})
 	}
 

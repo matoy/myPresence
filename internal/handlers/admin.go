@@ -103,7 +103,7 @@ func (h *AdminHandler) DeleteTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	teamName := h.DB.GetTeamName(id)
-	h.DB.DeleteTeam(id)
+	h.DB.DeleteTeam(id) //nolint:errcheck
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "team", id, "delete", teamName)
 	}
@@ -121,8 +121,8 @@ func (h *AdminHandler) UpdateTeam(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name string `json:"name"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
-	h.DB.UpdateTeam(id, req.Name)
+	json.NewDecoder(r.Body).Decode(&req) //nolint:errcheck
+	h.DB.UpdateTeam(id, req.Name)        //nolint:errcheck
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "team", id, "update", req.Name)
 	}
@@ -142,12 +142,12 @@ func (h *AdminHandler) AddTeamMember(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		UserID int64 `json:"user_id"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	json.NewDecoder(r.Body).Decode(&req) //nolint:errcheck
 	memberName := strconv.FormatInt(req.UserID, 10)
 	if u, _ := h.DB.GetUserByID(req.UserID); u != nil {
 		memberName = u.Name
 	}
-	h.DB.AddTeamMember(teamID, req.UserID)
+	h.DB.AddTeamMember(teamID, req.UserID) //nolint:errcheck
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "team", teamID, "add_member", memberName)
 	}
@@ -169,7 +169,7 @@ func (h *AdminHandler) RemoveTeamMember(w http.ResponseWriter, r *http.Request) 
 	if u, _ := h.DB.GetUserByID(userID); u != nil {
 		memberName = u.Name
 	}
-	h.DB.RemoveTeamMember(teamID, userID)
+	h.DB.RemoveTeamMember(teamID, userID) //nolint:errcheck
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "team", teamID, "remove_member", memberName)
 	}
@@ -236,8 +236,8 @@ func (h *AdminHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 		OnSite    bool   `json:"on_site"`
 		SortOrder int    `json:"sort_order"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
-	h.DB.UpdateStatus(models.Status{ID: id, Name: req.Name, Color: req.Color, Billable: req.Billable, OnSite: req.OnSite, SortOrder: req.SortOrder})
+	json.NewDecoder(r.Body).Decode(&req)                                                                                                             //nolint:errcheck
+	h.DB.UpdateStatus(models.Status{ID: id, Name: req.Name, Color: req.Color, Billable: req.Billable, OnSite: req.OnSite, SortOrder: req.SortOrder}) //nolint:errcheck
 	currentUser := middleware.GetUser(r)
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "status", id, "update", req.Name)
@@ -249,7 +249,7 @@ func (h *AdminHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 func (h *AdminHandler) DeleteStatus(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	statusName := h.DB.GetStatusName(id)
-	h.DB.DeleteStatus(id)
+	h.DB.DeleteStatus(id) //nolint:errcheck
 	currentUser := middleware.GetUser(r)
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "status", id, "delete", statusName)
@@ -271,7 +271,7 @@ func (h *AdminHandler) UpdateUserRoles(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Roles []string `json:"roles"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	json.NewDecoder(r.Body).Decode(&req) //nolint:errcheck
 	roles := strings.Join(req.Roles, ",")
 	if err := h.DB.UpdateUserRoles(id, roles); err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)

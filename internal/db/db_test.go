@@ -123,7 +123,7 @@ func TestGetUserReservationDates_OtherUserIsolation(t *testing.T) {
 	_, seatID := seedFloorplanAndSeat(t, d, "B1")
 
 	// Only Bob has a reservation
-	d.floorplan.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, '2026-04-14', 'full')", seatID, bob)
+	d.floorplan.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, '2026-04-14', 'full')", seatID, bob) //nolint:errcheck
 
 	m, err := d.GetUserReservationDates(alice, "2026-04-01", "2026-04-30")
 	if err != nil {
@@ -178,7 +178,7 @@ func TestBulkReserveSeat_SkipsTakenSeat(t *testing.T) {
 	d.presence.Exec("INSERT INTO presences (user_id, date, half, status_id) VALUES (?, '2026-04-14', 'full', ?)", bob, statusID)
 
 	// Alice books first
-	d.floorplan.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, '2026-04-14', 'full')", seatID, alice)
+	d.floorplan.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, '2026-04-14', 'full')", seatID, alice) //nolint:errcheck
 
 	// Bob tries to bulk-reserve the same seat/date — should be skipped (conflict)
 	count := d.BulkReserveSeat(seatID, bob, []string{"2026-04-14"}, "full")
@@ -206,7 +206,7 @@ func TestCancelUserReservationsForDates_RemovesOwn(t *testing.T) {
 
 	dates := []string{"2026-04-14", "2026-04-15"}
 	for _, date := range dates {
-		d.floorplan.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, ?, 'full')", seatID, userID, date)
+		d.floorplan.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, ?, 'full')", seatID, userID, date) //nolint:errcheck
 	}
 
 	if err := d.CancelUserReservationsForDates(userID, dates); err != nil {
@@ -229,7 +229,7 @@ func TestCancelUserReservationsForDates_PreservesOtherUser(t *testing.T) {
 	d.floorplan.Exec("INSERT INTO seat_reservations (seat_id, user_id, date, half) VALUES (?, ?, '2026-04-15', 'full')", seatID, bob)
 
 	// Cancel only alice's dates
-	d.CancelUserReservationsForDates(alice, []string{"2026-04-14"})
+	d.CancelUserReservationsForDates(alice, []string{"2026-04-14"}) //nolint:errcheck
 
 	// Bob's reservation on 2026-04-15 should remain
 	m, _ := d.GetUserReservationDates(bob, "2026-04-01", "2026-04-30")

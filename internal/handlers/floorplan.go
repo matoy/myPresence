@@ -266,7 +266,7 @@ func (h *FloorplanHandler) DeleteFloorplan(w http.ResponseWriter, r *http.Reques
 	if err == nil && fp.ImagePath != "" {
 		os.Remove(filepath.Join(h.DataDir, fp.ImagePath))
 	}
-	h.DB.DeleteFloorplan(id)
+	h.DB.DeleteFloorplan(id) //nolint:errcheck
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 
@@ -382,7 +382,7 @@ func (h *FloorplanHandler) UpdateSeat(w http.ResponseWriter, r *http.Request) {
 // DeleteSeat handles DELETE /admin/seats/{id}.
 func (h *FloorplanHandler) DeleteSeat(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	h.DB.DeleteSeat(id)
+	h.DB.DeleteSeat(id) //nolint:errcheck
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 

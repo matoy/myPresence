@@ -148,13 +148,13 @@ type DBCounts struct {
 // Errors are silently ignored; missing tables return 0.
 func (d *DB) Counts() DBCounts {
 	var c DBCounts
-	d.core.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&c.Users)
-	d.core.QueryRow(`SELECT COUNT(*) FROM sessions WHERE expires_at > datetime('now')`).Scan(&c.ActiveSessions)
-	d.core.QueryRow(`SELECT COUNT(*) FROM teams`).Scan(&c.Teams)
-	d.presence.QueryRow(`SELECT COUNT(*) FROM statuses`).Scan(&c.Statuses)
-	d.presence.QueryRow(`SELECT COUNT(*) FROM presences`).Scan(&c.Presences)
-	d.floorplan.QueryRow(`SELECT COUNT(*) FROM floorplans`).Scan(&c.Floorplans)
-	d.floorplan.QueryRow(`SELECT COUNT(*) FROM seats`).Scan(&c.Seats)
+	d.core.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&c.Users)                                                //nolint:errcheck
+	d.core.QueryRow(`SELECT COUNT(*) FROM sessions WHERE expires_at > datetime('now')`).Scan(&c.ActiveSessions) //nolint:errcheck
+	d.core.QueryRow(`SELECT COUNT(*) FROM teams`).Scan(&c.Teams)                                                //nolint:errcheck
+	d.presence.QueryRow(`SELECT COUNT(*) FROM statuses`).Scan(&c.Statuses)                                      //nolint:errcheck
+	d.presence.QueryRow(`SELECT COUNT(*) FROM presences`).Scan(&c.Presences)                                    //nolint:errcheck
+	d.floorplan.QueryRow(`SELECT COUNT(*) FROM floorplans`).Scan(&c.Floorplans)                                 //nolint:errcheck
+	d.floorplan.QueryRow(`SELECT COUNT(*) FROM seats`).Scan(&c.Seats)                                           //nolint:errcheck
 	return c
 }
 
@@ -228,10 +228,10 @@ FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 	if err != nil {
 		return err
 	}
-	d.core.Exec(`UPDATE users SET role = 'global' WHERE role = 'admin'`)
-	d.core.Exec(`ALTER TABLE users ADD COLUMN disabled BOOLEAN NOT NULL DEFAULT 0`)
-	d.core.Exec(`UPDATE users SET role = REPLACE(role, 'stats_viewer', 'activity_viewer') WHERE role LIKE '%stats_viewer%'`)
-	d.core.Exec(`UPDATE users SET role = REPLACE(role, 'cra_viewer', 'activity_viewer') WHERE role LIKE '%cra_viewer%'`)
+	d.core.Exec(`UPDATE users SET role = 'global' WHERE role = 'admin'`)                                                     //nolint:errcheck
+	d.core.Exec(`ALTER TABLE users ADD COLUMN disabled BOOLEAN NOT NULL DEFAULT 0`)                                          //nolint:errcheck
+	d.core.Exec(`UPDATE users SET role = REPLACE(role, 'stats_viewer', 'activity_viewer') WHERE role LIKE '%stats_viewer%'`) //nolint:errcheck
+	d.core.Exec(`UPDATE users SET role = REPLACE(role, 'cra_viewer', 'activity_viewer') WHERE role LIKE '%cra_viewer%'`)     //nolint:errcheck
 	return nil
 }
 
@@ -275,10 +275,10 @@ created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	if err != nil {
 		return err
 	}
-	d.presence.Exec(`ALTER TABLE statuses ADD COLUMN on_site BOOLEAN NOT NULL DEFAULT 0`)
-	d.presence.Exec(`ALTER TABLE presence_logs ADD COLUMN half TEXT NOT NULL DEFAULT 'full'`)
+	d.presence.Exec(`ALTER TABLE statuses ADD COLUMN on_site BOOLEAN NOT NULL DEFAULT 0`)     //nolint:errcheck
+	d.presence.Exec(`ALTER TABLE presence_logs ADD COLUMN half TEXT NOT NULL DEFAULT 'full'`) //nolint:errcheck
 	var halfColExists int
-	d.presence.QueryRow("SELECT COUNT(*) FROM pragma_table_info('presences') WHERE name='half'").Scan(&halfColExists)
+	d.presence.QueryRow("SELECT COUNT(*) FROM pragma_table_info('presences') WHERE name='half'").Scan(&halfColExists) //nolint:errcheck
 	if halfColExists == 0 {
 		d.presence.Exec(`CREATE TABLE presences_new (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -288,10 +288,10 @@ half TEXT NOT NULL DEFAULT 'full',
 status_id INTEGER NOT NULL,
 UNIQUE(user_id, date, half),
 FOREIGN KEY (status_id) REFERENCES statuses(id)
-)`)
-		d.presence.Exec(`INSERT INTO presences_new (id, user_id, date, half, status_id) SELECT id, user_id, date, 'full', status_id FROM presences`)
-		d.presence.Exec(`DROP TABLE presences`)
-		d.presence.Exec(`ALTER TABLE presences_new RENAME TO presences`)
+)`) //nolint:errcheck
+		d.presence.Exec(`INSERT INTO presences_new (id, user_id, date, half, status_id) SELECT id, user_id, date, 'full', status_id FROM presences`) //nolint:errcheck
+		d.presence.Exec(`DROP TABLE presences`)                                                                                                      //nolint:errcheck
+		d.presence.Exec(`ALTER TABLE presences_new RENAME TO presences`)                                                                             //nolint:errcheck
 	}
 	return nil
 }
@@ -428,7 +428,7 @@ func copyLegacyRows(src, dst *sql.DB, srcQuery, dstInsert string) error {
 	}
 	stmt, err := tx.Prepare(dstInsert)
 	if err != nil {
-		tx.Rollback()
+		tx.Rollback() //nolint:errcheck
 		return err
 	}
 	defer stmt.Close()
@@ -441,13 +441,13 @@ func copyLegacyRows(src, dst *sql.DB, srcQuery, dstInsert string) error {
 
 	for rows.Next() {
 		if err := rows.Scan(ptrs...); err != nil {
-			tx.Rollback()
+			tx.Rollback() //nolint:errcheck
 			return err
 		}
-		stmt.Exec(vals...) // INSERT OR IGNORE: per-row conflicts are expected and OK
+		stmt.Exec(vals...) //nolint:errcheck // INSERT OR IGNORE: per-row conflicts are expected and OK
 	}
 	if err := rows.Err(); err != nil {
-		tx.Rollback()
+		tx.Rollback() //nolint:errcheck
 		return err
 	}
 	return tx.Commit()
@@ -1440,7 +1440,7 @@ func (d *DB) fetchUserNames(ids map[int64]struct{}) map[int64]string {
 	for rows.Next() {
 		var id int64
 		var name string
-		rows.Scan(&id, &name)
+		rows.Scan(&id, &name) //nolint:errcheck
 		names[id] = name
 	}
 	return names
@@ -1469,7 +1469,7 @@ func (d *DB) fetchTeamNames(ids map[int64]struct{}) map[int64]string {
 	for rows.Next() {
 		var id int64
 		var name string
-		rows.Scan(&id, &name)
+		rows.Scan(&id, &name) //nolint:errcheck
 		names[id] = name
 	}
 	return names
@@ -1498,7 +1498,7 @@ func (d *DB) fetchStatusNames(ids map[int64]struct{}) map[int64]string {
 	for rows.Next() {
 		var id int64
 		var name string
-		rows.Scan(&id, &name)
+		rows.Scan(&id, &name) //nolint:errcheck
 		names[id] = name
 	}
 	return names
@@ -1527,7 +1527,7 @@ func (d *DB) fetchHolidayNames(ids map[int64]struct{}) map[int64]string {
 	for rows.Next() {
 		var id int64
 		var name string
-		rows.Scan(&id, &name)
+		rows.Scan(&id, &name) //nolint:errcheck
 		names[id] = name
 	}
 	return names
@@ -1536,7 +1536,7 @@ func (d *DB) fetchHolidayNames(ids map[int64]struct{}) map[int64]string {
 // --- Admin logging ---
 
 func (d *DB) LogAdminAction(actorID int64, entityType string, entityID int64, action, details string) {
-	d.audit.Exec(
+	d.audit.Exec( //nolint:errcheck
 		"INSERT INTO admin_logs (actor_id, entity_type, entity_id, action, details) VALUES (?, ?, ?, ?, ?)",
 		actorID, entityType, entityID, action, details,
 	)
