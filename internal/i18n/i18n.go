@@ -301,6 +301,10 @@ var en = map[string]string{
 	"pat.copy":           "📋 Copy to clipboard",
 	"pat.close":          "Close",
 	"pat.created_success":"Token created successfully",
+	"pat.admin_all_tokens": "All tokens (admin)",
+	"pat.admin_search_ph":  "Search by user or description…",
+	"pat.admin_no_tokens":  "No tokens found.",
+	"pat.admin_expiry":     "Expiry",
 
 	// Floorplan (user view)
 	"fp.title":                  "🗺️ Floor Plans",
@@ -597,6 +601,10 @@ var fr = map[string]string{
 	"pat.copy":           "📋 Copier dans le presse-papiers",
 	"pat.close":          "Fermer",
 	"pat.created_success":"Token créé avec succès",
+	"pat.admin_all_tokens": "Tous les tokens (admin)",
+	"pat.admin_search_ph":  "Rechercher par utilisateur ou description…",
+	"pat.admin_no_tokens":  "Aucun token trouvé.",
+	"pat.admin_expiry":     "Expiration",
 
 	// Floorplan (user view)
 	"fp.title":                  "🗺️ Plans d'étages",
@@ -893,6 +901,10 @@ var de = map[string]string{
 	"pat.copy":           "📋 In Zwischenablage kopieren",
 	"pat.close":          "Schließen",
 	"pat.created_success":"Token erfolgreich erstellt",
+	"pat.admin_all_tokens": "Alle Tokens (Admin)",
+	"pat.admin_search_ph":  "Nach Benutzer oder Beschreibung suchen…",
+	"pat.admin_no_tokens":  "Keine Tokens gefunden.",
+	"pat.admin_expiry":     "Ablauf",
 
 	// Floorplan (user view)
 	"fp.title":                  "🗺️ Grundrisspläne",
@@ -1189,6 +1201,10 @@ var es = map[string]string{
 	"pat.copy":           "📋 Copiar al portapapeles",
 	"pat.close":          "Cerrar",
 	"pat.created_success":"Token creado con éxito",
+	"pat.admin_all_tokens": "Todos los tokens (admin)",
+	"pat.admin_search_ph":  "Buscar por usuario o descripción…",
+	"pat.admin_no_tokens":  "No se encontraron tokens.",
+	"pat.admin_expiry":     "Expiración",
 
 	// Floorplan (user view)
 	"fp.title":                  "🗺️ Planos de planta",
@@ -1497,6 +1513,10 @@ var it = map[string]string{
 	"pat.copy":           "📋 Copia negli appunti",
 	"pat.close":          "Chiudi",
 	"pat.created_success":"Token creato con successo",
+	"pat.admin_all_tokens": "Tutti i token (admin)",
+	"pat.admin_search_ph":  "Cerca per utente o descrizione…",
+	"pat.admin_no_tokens":  "Nessun token trovato.",
+	"pat.admin_expiry":     "Scadenza",
 
 	// Floorplan (user view)
 	"fp.title":                  "🗺️ Planimetrie",

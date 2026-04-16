@@ -623,6 +623,56 @@ return fmt.Errorf("token not found")
 return nil
 }
 
+// AdminRevokePAT deletes any token by ID regardless of owner (global admin action).
+func (d *DB) AdminRevokePAT(id int64) error {
+	res, err := d.core.Exec(`DELETE FROM personal_access_tokens WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("token not found")
+	}
+	return nil
+}
+
+// AdminPAT is a PersonalAccessToken enriched with the owner's display name.
+type AdminPAT struct {
+	models.PersonalAccessToken
+	UserName string `json:"user_name"`
+}
+
+// ListAllPATs returns all personal access tokens across all users, joined with user name.
+func (d *DB) ListAllPATs() ([]AdminPAT, error) {
+	rows, err := d.core.Query(`
+SELECT t.id, t.user_id, t.description, t.token_prefix, t.expires_at, t.last_used_at, t.created_at, u.name
+FROM personal_access_tokens t
+JOIN users u ON t.user_id = u.id
+ORDER BY t.created_at DESC
+`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var pats []AdminPAT
+	for rows.Next() {
+		var p AdminPAT
+		var expiresAt, lastUsedAt sql.NullTime
+		if err := rows.Scan(&p.ID, &p.UserID, &p.Description, &p.TokenPrefix, &expiresAt, &lastUsedAt, &p.CreatedAt, &p.UserName); err != nil {
+			return nil, err
+		}
+		if expiresAt.Valid {
+			p.ExpiresAt = &expiresAt.Time
+		}
+		if lastUsedAt.Valid {
+			p.LastUsedAt = &lastUsedAt.Time
+		}
+		pats = append(pats, p)
+	}
+	return pats, rows.Err()
+}
+
 func (d *DB) GetUserByPAT(token string) (*models.User, error) {
 sum := sha256.Sum256([]byte(token))
 tokenHash := hex.EncodeToString(sum[:])

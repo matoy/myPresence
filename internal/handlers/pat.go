@@ -26,10 +26,22 @@ func (h *PATHandler) PATPage(w http.ResponseWriter, r *http.Request) {
 	if pats == nil {
 		pats = []models.PersonalAccessToken{}
 	}
-	h.Render(w, r, "pat", map[string]interface{}{
+
+	pageData := map[string]interface{}{
 		"Tokens":    pats,
 		"CanCreate": user.CanUseTokens(),
-	})
+		"IsAdmin":   user.HasRole("global"),
+	}
+
+	if user.HasRole("global") {
+		allPATs, _ := h.DB.ListAllPATs()
+		if allPATs == nil {
+			allPATs = []db.AdminPAT{}
+		}
+		pageData["AllTokens"] = allPATs
+	}
+
+	h.Render(w, r, "pat", pageData)
 }
 
 // CreatePAT creates a new Personal Access Token for the authenticated user.
@@ -101,6 +113,26 @@ func (h *PATHandler) RevokePAT(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	jsonOK(w, map[string]string{"status": "ok"})
+}
+
+// AdminRevokePAT revokes any token regardless of owner (global admin only).
+// Route: DELETE /api/admin/tokens/{id}
+func (h *PATHandler) AdminRevokePAT(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUser(r)
+	if !user.HasRole("global") {
+		jsonError(w, "Accès non autorisé", http.StatusForbidden)
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		jsonError(w, "ID invalide", http.StatusBadRequest)
+		return
+	}
+	if err := h.DB.AdminRevokePAT(id); err != nil {
+		jsonError(w, "Token introuvable", http.StatusNotFound)
+		return
+	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 

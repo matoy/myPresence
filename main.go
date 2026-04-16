@@ -395,6 +395,7 @@ func main() {
 		authMux.HandleFunc("GET /api/tokens", patHandler.ListPATs)
 		authMux.HandleFunc("POST /api/tokens", patHandler.CreatePAT)
 		authMux.HandleFunc("DELETE /api/tokens/{id}", patHandler.RevokePAT)
+		authMux.HandleFunc("DELETE /api/admin/tokens/{id}", patHandler.AdminRevokePAT)
 	}
 
 	// Personal settings
