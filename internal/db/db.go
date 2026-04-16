@@ -1248,7 +1248,7 @@ func (d *DB) ListHolidays() ([]models.Holiday, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var holidays []models.Holiday
 	for rows.Next() {
@@ -1269,7 +1269,7 @@ func (d *DB) GetHolidayMap(startDate, endDate string) (map[string]models.Holiday
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	result := make(map[string]models.Holiday)
 	for rows.Next() {
@@ -1370,7 +1370,7 @@ WHERE pl.user_id = ?`
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var logs []models.PresenceLog
 	actorIDs := make(map[int64]struct{})
@@ -1436,7 +1436,7 @@ func (d *DB) fetchUserNames(ids map[int64]struct{}) map[int64]string {
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 	names := make(map[int64]string)
 	for rows.Next() {
 		var id int64
@@ -1465,7 +1465,7 @@ func (d *DB) fetchTeamNames(ids map[int64]struct{}) map[int64]string {
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 	names := make(map[int64]string)
 	for rows.Next() {
 		var id int64
@@ -1494,7 +1494,7 @@ func (d *DB) fetchStatusNames(ids map[int64]struct{}) map[int64]string {
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 	names := make(map[int64]string)
 	for rows.Next() {
 		var id int64
@@ -1523,7 +1523,7 @@ func (d *DB) fetchHolidayNames(ids map[int64]struct{}) map[int64]string {
 	if err != nil {
 		return nil
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 	names := make(map[int64]string)
 	for rows.Next() {
 		var id int64
@@ -1560,7 +1560,7 @@ FROM admin_logs WHERE actor_id = ?`
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var logs []models.AdminLog
 	teamIDs := make(map[int64]struct{})
@@ -1624,7 +1624,7 @@ func (d *DB) ListFloorplans() ([]models.Floorplan, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 	var fps []models.Floorplan
 	for rows.Next() {
 		var f models.Floorplan
@@ -1674,7 +1674,7 @@ func (d *DB) ListSeats(floorplanID int64) ([]models.Seat, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 	var seats []models.Seat
 	for rows.Next() {
 		var s models.Seat
@@ -1719,7 +1719,7 @@ WHERE s.floorplan_id = ? AND sr.date = ?
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	type resEntry struct {
 		uid   int64
@@ -1807,7 +1807,7 @@ func (d *DB) GetUserReservationDates(userID int64, startDate, endDate string) (m
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 	m := make(map[string]bool)
 	for rows.Next() {
 		var date string

@@ -51,7 +51,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Database error: %v", err)
 	}
-	defer database.Close()
+	defer database.Close() //nolint:errcheck
 
 	// Seed defaults
 	if err := database.SeedDefaults(cfg.AdminUser, cfg.AdminPassword); err != nil {
