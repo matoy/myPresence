@@ -14,8 +14,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      - name: Set up Go
+        with:
+          persist-credentials: false
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
