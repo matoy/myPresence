@@ -267,4 +267,6 @@ type PageData struct {
 	SupportedLangs interface{}       // []i18n.LangInfo — passed from main.go to avoid import cycle
 	// CSRF
 	CSRFToken string // HMAC-SHA256(secretKey, sessionToken); empty for unauthenticated pages
+	// Impersonation
+	RealAdmin *User // non-nil when an admin is currently impersonating another user
 }

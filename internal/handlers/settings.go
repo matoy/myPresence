@@ -116,3 +116,82 @@ func (h *SettingsHandler) ChangePasswordPost(w http.ResponseWriter, r *http.Requ
 
 	http.Redirect(w, r, "/settings/change-password?success=Mot+de+passe+modifi%C3%A9+avec+succ%C3%A8s", http.StatusSeeOther)
 }
+
+// ImpersonatePost allows a global admin to take on the session of another user.
+func (h *SettingsHandler) ImpersonatePost(w http.ResponseWriter, r *http.Request) {
+	admin := middleware.GetUser(r)
+	if admin == nil || !admin.HasRole(models.RoleGlobal) {
+		http.Error(w, "Accès refusé", http.StatusForbidden)
+		return
+	}
+	login := r.FormValue("login")
+	if login == "" {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	target, err := h.DB.GetUserByEmail(login)
+	if err != nil || target.Disabled {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	if target.ID == admin.ID {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	adminCookie, err := r.Cookie("session")
+	if err != nil {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	newToken, err := h.DB.CreateSession(target.ID)
+	if err != nil {
+		http.Error(w, "Erreur session", http.StatusInternalServerError)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "real_session",
+		Value:    adminCookie.Value,
+		Path:     "/",
+		MaxAge:   4 * 3600,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session",
+		Value:    newToken,
+		Path:     "/",
+		MaxAge:   4 * 3600,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// ImpersonateExitPost restores the original admin session after impersonation.
+func (h *SettingsHandler) ImpersonateExitPost(w http.ResponseWriter, r *http.Request) {
+	realCookie, err := r.Cookie("real_session")
+	if err != nil {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	adminUser, err := h.DB.GetSessionUser(realCookie.Value)
+	if err != nil || !adminUser.HasRole(models.RoleGlobal) {
+		http.SetCookie(w, &http.Cookie{Name: "session", MaxAge: -1, Path: "/"})
+		http.SetCookie(w, &http.Cookie{Name: "real_session", MaxAge: -1, Path: "/"})
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return
+	}
+	if impCookie, err := r.Cookie("session"); err == nil {
+		_ = h.DB.DeleteSession(impCookie.Value)
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session",
+		Value:    realCookie.Value,
+		Path:     "/",
+		MaxAge:   30 * 24 * 3600,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+	http.SetCookie(w, &http.Cookie{Name: "real_session", MaxAge: -1, Path: "/"})
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}

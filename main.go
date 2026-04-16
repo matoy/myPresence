@@ -183,6 +183,13 @@ func main() {
 		if cookie, err := r.Cookie("session"); err == nil {
 			csrfToken = middleware.GenerateCSRFToken(cfg.SecretKey, cookie.Value)
 		}
+		// Detect impersonation: check if a real_session cookie exists and is valid
+		var realAdmin *models.User
+		if realCookie, err := r.Cookie("real_session"); err == nil {
+			if adminUser, err := database.GetSessionUser(realCookie.Value); err == nil && adminUser.HasRole(models.RoleGlobal) {
+				realAdmin = adminUser
+			}
+		}
 		pd := models.PageData{
 			Config: map[string]string{
 				"AppName":        cfg.AppName,
@@ -206,6 +213,7 @@ func main() {
 			Lang:              lang,
 			SupportedLangs:    i18n.Supported,
 			CSRFToken:         csrfToken,
+			RealAdmin:         realAdmin,
 		}
 		// Add logo flag to config map
 		configMap := pd.Config.(map[string]string)
@@ -424,6 +432,10 @@ func main() {
 	authMux.HandleFunc("GET /settings/my-logs", settingsHandler.MyLogsPage)
 	authMux.HandleFunc("GET /settings/change-password", settingsHandler.ChangePasswordPage)
 	authMux.Handle("POST /settings/change-password", middleware.ValidateCSRF(cfg.SecretKey)(http.HandlerFunc(settingsHandler.ChangePasswordPost)))
+
+	// Impersonation (global admin only)
+	authMux.Handle("POST /impersonate", middleware.ValidateCSRF(cfg.SecretKey)(http.HandlerFunc(settingsHandler.ImpersonatePost)))
+	authMux.Handle("POST /impersonate-exit", middleware.ValidateCSRF(cfg.SecretKey)(http.HandlerFunc(settingsHandler.ImpersonateExitPost)))
 
 	// Floorplan user routes
 	if !cfg.DisableFloorplans {
