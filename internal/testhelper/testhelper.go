@@ -123,7 +123,7 @@ func (e *Env) DoJSON(method, path string, payload interface{}) *http.Response {
 // MustDecodeJSON decodes the JSON response body into v; fails the test on error.
 func MustDecodeJSON(t *testing.T, resp *http.Response, v interface{}) {
 	t.Helper()
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
 		t.Fatalf("decode JSON: %v", err)
 	}

@@ -57,7 +57,7 @@ func sendTLS(addr, host string, auth smtp.Auth, from, to string, msg []byte) err
 	if err != nil {
 		return fmt.Errorf("SMTP client: %w", err)
 	}
-	defer c.Close()
+	defer c.Close() //nolint:errcheck
 
 	if auth != nil {
 		if err := c.Auth(auth); err != nil {

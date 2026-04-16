@@ -264,7 +264,7 @@ func (h *FloorplanHandler) DeleteFloorplan(w http.ResponseWriter, r *http.Reques
 	// Delete image file if exists
 	fp, err := h.DB.GetFloorplan(id)
 	if err == nil && fp.ImagePath != "" {
-		os.Remove(filepath.Join(h.DataDir, fp.ImagePath))
+		_ = os.Remove(filepath.Join(h.DataDir, fp.ImagePath))
 	}
 	h.DB.DeleteFloorplan(id) //nolint:errcheck
 	jsonOK(w, map[string]string{"status": "ok"})
@@ -282,7 +282,7 @@ func (h *FloorplanHandler) UploadFloorplanImage(w http.ResponseWriter, r *http.R
 		jsonError(w, "Fichier manquant", http.StatusBadRequest)
 		return
 	}
-	defer file.Close()
+	defer file.Close() //nolint:errcheck
 
 	// Validate extension
 	ext := strings.ToLower(filepath.Ext(header.Filename))
@@ -321,7 +321,7 @@ func (h *FloorplanHandler) UploadFloorplanImage(w http.ResponseWriter, r *http.R
 		jsonError(w, "Erreur création fichier", http.StatusInternalServerError)
 		return
 	}
-	defer dst.Close()
+	defer dst.Close() //nolint:errcheck
 
 	// Reconstruct full reader: prepend the already-read sniff bytes, then limit total size
 	fullReader := io.LimitReader(io.MultiReader(bytes.NewReader(sniff[:n]), file), maxUploadBytes)

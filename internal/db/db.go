@@ -35,15 +35,15 @@ func openSQLite(path string) (*sql.DB, error) {
 	db.SetMaxOpenConns(10)
 	db.SetMaxIdleConns(5)
 	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	if _, err := db.Exec("PRAGMA busy_timeout=5000"); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, err
 	}
 	return db, nil
@@ -57,20 +57,20 @@ func Open(dataDir string) (*DB, error) {
 	}
 	presenceDB, err := openSQLite(dataDir + "/presence.db")
 	if err != nil {
-		coreDB.Close()
+		_ = coreDB.Close()
 		return nil, fmt.Errorf("open presence.db: %w", err)
 	}
 	floorplanDB, err := openSQLite(dataDir + "/floorplan.db")
 	if err != nil {
-		coreDB.Close()
-		presenceDB.Close()
+		_ = coreDB.Close()
+		_ = presenceDB.Close()
 		return nil, fmt.Errorf("open floorplan.db: %w", err)
 	}
 	auditDB, err := openSQLite(dataDir + "/audit.db")
 	if err != nil {
-		coreDB.Close()
-		presenceDB.Close()
-		floorplanDB.Close()
+		_ = coreDB.Close()
+		_ = presenceDB.Close()
+		_ = floorplanDB.Close()
 		return nil, fmt.Errorf("open audit.db: %w", err)
 	}
 
@@ -161,16 +161,16 @@ func (d *DB) Counts() DBCounts {
 // Close closes all database connections.
 func (d *DB) Close() {
 	if d.core != nil {
-		d.core.Close()
+		_ = d.core.Close()
 	}
 	if d.presence != nil {
-		d.presence.Close()
+		_ = d.presence.Close()
 	}
 	if d.floorplan != nil {
-		d.floorplan.Close()
+		_ = d.floorplan.Close()
 	}
 	if d.audit != nil {
-		d.audit.Close()
+		_ = d.audit.Close()
 	}
 }
 
@@ -348,7 +348,7 @@ func (d *DB) migrateLegacy(legacyPath string) error {
 	if err != nil {
 		return fmt.Errorf("open legacy: %w", err)
 	}
-	defer legacy.Close()
+	defer legacy.Close() //nolint:errcheck
 	if err := legacy.Ping(); err != nil {
 		return fmt.Errorf("ping legacy: %w", err)
 	}
@@ -416,7 +416,7 @@ func copyLegacyRows(src, dst *sql.DB, srcQuery, dstInsert string) error {
 	if err != nil {
 		return nil // table may not exist in older versions
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	cols, err := rows.Columns()
 	if err != nil {
@@ -432,7 +432,7 @@ func copyLegacyRows(src, dst *sql.DB, srcQuery, dstInsert string) error {
 		tx.Rollback() //nolint:errcheck
 		return err
 	}
-	defer stmt.Close()
+	defer stmt.Close() //nolint:errcheck
 
 	vals := make([]interface{}, len(cols))
 	ptrs := make([]interface{}, len(cols))
@@ -630,7 +630,7 @@ ORDER BY created_at DESC
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var pats []models.PersonalAccessToken
 	for rows.Next() {
@@ -692,7 +692,7 @@ ORDER BY t.created_at DESC
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	var pats []AdminPAT
 	for rows.Next() {
@@ -1325,7 +1325,7 @@ func (d *DB) LogPresenceAction(actorID, userID int64, action string, dates []str
 		if err != nil {
 			return err
 		}
-		defer s.Close()
+		defer s.Close() //nolint:errcheck
 		for _, date := range dates {
 			if _, err := s.Exec(userID, actorID, action, date, statusID, half); err != nil {
 				return err
@@ -1338,7 +1338,7 @@ func (d *DB) LogPresenceAction(actorID, userID int64, action string, dates []str
 		if err != nil {
 			return err
 		}
-		defer s.Close()
+		defer s.Close() //nolint:errcheck
 		for _, date := range dates {
 			if _, err := s.Exec(userID, actorID, action, date, half); err != nil {
 				return err

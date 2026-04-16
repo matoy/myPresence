@@ -181,7 +181,7 @@ func (e *testEnv) injectSession(t *testing.T, userID int64) {
 // mustDecodeJSON decodes JSON from resp.Body into v; fails on error.
 func mustDecodeJSON(t *testing.T, resp *http.Response, v interface{}) {
 	t.Helper()
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 	if err := json.NewDecoder(resp.Body).Decode(v); err != nil {
 		t.Fatalf("decode JSON: %v", err)
 	}
