@@ -1,5 +1,8 @@
 name: CI
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   push:
     branches: [main]
@@ -36,6 +39,8 @@ jobs:
 
       - name: Vulnerability check
         uses: golang/govulncheck-action@v1
+        with:
+          cache: false
 
       - name: Test
         run: go test -v -race -coverprofile=coverage.out ./...
