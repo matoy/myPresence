@@ -2057,7 +2057,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{job=\"mypresence\"}",
+          "expr": "{${loki_stream}}",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" }
         }
       ]
@@ -2079,7 +2079,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{job=\"mypresence\"} | json | msg =~ `auth\\..*`",
+          "expr": "{${loki_stream}} | json | msg =~ `auth\\..*`",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" }
         }
       ]
@@ -2101,7 +2101,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{job=\"mypresence\"} | json | msg =~ `(presence|admin|impersonate)\\..*`",
+          "expr": "{${loki_stream}} | json | msg =~ `(presence|admin|impersonate)\\..*`",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" }
         }
       ]
@@ -2123,7 +2123,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "{job=\"mypresence\", level=~\"WARN|ERROR\"}",
+          "expr": "{${loki_stream}, level=~\"WARN|ERROR\"}",
           "datasource": { "type": "loki", "uid": "${DS_LOKI}" }
         }
       ]
@@ -2160,6 +2160,26 @@
         "refresh": 1,
         "type": "datasource",
         "label": "Loki"
+      },
+      {
+        "type": "textbox",
+        "name": "loki_stream",
+        "label": "Loki stream selector",
+        "description": "LogQL label selector placed inside {}. Example: job=\"mypresence\" or service_name=\"myPresence-app\"",
+        "current": {
+          "selected": true,
+          "text": "job=\"mypresence\"",
+          "value": "job=\"mypresence\""
+        },
+        "options": [
+          {
+            "selected": true,
+            "text": "job=\"mypresence\"",
+            "value": "job=\"mypresence\""
+          }
+        ],
+        "query": "job=\"mypresence\"",
+        "hide": 0
       }
     ]
   },

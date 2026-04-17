@@ -442,3 +442,6 @@ docker compose down && docker compose up -d --build
 
 ### Floor Plans
 ![Floor plan with seat reservations](docs/screenshots/08-floorplan.png)
+
+### Grafana Dashboard
+![Grafana dashboard](docs/screenshots/09-grafana.png)
