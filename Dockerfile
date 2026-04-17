@@ -6,24 +6,20 @@
 # --- Stage 1: Build ---
 FROM golang:1.25.9-alpine AS builder
 
-RUN apk add --no-cache git ca-certificates
 
 WORKDIR /build
+ENV GONOSUMDB=*
+ENV GOFLAGS=-mod=vendor
 
-# Copy go.mod first for dependency caching
-COPY go.mod go.sum ./
-RUN go mod download 2>/dev/null || true
-
-# Copy all source
+# Copy all source (vendor included)
 COPY . .
 
-# Build static binary
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app .
+# Build static binary using vendored dependencies (no network access needed)
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=vendor -ldflags="-s -w" -o /app .
 
 # --- Stage 2: Runtime ---
 FROM alpine:3.22
 
-RUN apk add --no-cache ca-certificates tzdata
 
 # Create non-root user
 RUN addgroup -g 1001 -S appuser && \
