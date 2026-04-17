@@ -8,8 +8,9 @@ FROM golang:1.25.9-alpine AS builder
 
 
 WORKDIR /build
-ENV GONOSUMDB=*
-ENV GOFLAGS=-mod=vendor
+
+COPY go.mod ./
+RUN go mod download 2>/dev/null || true
 
 # Copy all source (vendor included)
 COPY . .
