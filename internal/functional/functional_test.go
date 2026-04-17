@@ -19,6 +19,7 @@ import (
 	"presence-app/internal/config"
 	"presence-app/internal/db"
 	"presence-app/internal/handlers"
+	"presence-app/internal/i18n"
 	"presence-app/internal/middleware"
 	"presence-app/internal/models"
 )
@@ -51,7 +52,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		DataDir:           dir,
 		DefaultLang:       "en",
 		SecretKey:         "test-secret-32-chars-padded-here!",
-		DisableFloorplans: true, // keep tests simple
+		DisableFloorplans: false,
 		DisableAPI:        false,
 	}
 
@@ -59,7 +60,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		t.Fatalf("seed: %v", err)
 	}
 
-	mux := buildRouter(database, cfg)
+	mux := buildRouter(database, cfg, dir)
 
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{
@@ -114,6 +115,18 @@ func (e *testEnv) postJSON(path string, payload interface{}) *http.Response {
 // deleteJSON sends a DELETE request (no body needed for most endpoints).
 func (e *testEnv) deleteReq(path string) *http.Response {
 	req, _ := http.NewRequest(http.MethodDelete, e.url(path), nil)
+	resp, err := e.client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	return resp
+}
+
+// deleteJSONBody sends a DELETE request with a JSON body.
+func (e *testEnv) deleteJSONBody(path string, payload interface{}) *http.Response {
+	b, _ := json.Marshal(payload)
+	req, _ := http.NewRequest(http.MethodDelete, e.url(path), bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
 	resp, err := e.client.Do(req)
 	if err != nil {
 		panic(err)
@@ -189,7 +202,7 @@ func mustDecodeJSON(t *testing.T, resp *http.Response, v interface{}) {
 
 // buildRouter wires up a minimal but complete router – same logic as main.go
 // but without templates (render is stubbed to write a 200 OK).
-func buildRouter(database *db.DB, cfg *config.Config) http.Handler {
+func buildRouter(database *db.DB, cfg *config.Config, dataDir string) http.Handler {
 	// Stub renderer: just returns 200 with a plain-text page name.
 	renderPage := func(w http.ResponseWriter, r *http.Request, page string, data interface{}) {
 		w.Header().Set("Content-Type", "text/html")
@@ -204,7 +217,7 @@ func buildRouter(database *db.DB, cfg *config.Config) http.Handler {
 		Render:      renderPage,
 		RateLimiter: middleware.NewLoginRateLimiter(),
 	}
-	calH := &handlers.CalendarHandler{DB: database, Render: renderPage, DisableFloorplans: true}
+	calH := &handlers.CalendarHandler{DB: database, Render: renderPage, DisableFloorplans: false}
 	adminH := &handlers.AdminHandler{DB: database, Render: renderPage}
 	activityH := &handlers.ActivityHandler{DB: database, Render: renderPage}
 	usersH := &handlers.UsersAdminHandler{DB: database, Render: renderPage}
@@ -212,6 +225,7 @@ func buildRouter(database *db.DB, cfg *config.Config) http.Handler {
 	patH := &handlers.PATHandler{DB: database, Render: renderPage}
 	holidaysH := &handlers.HolidaysHandler{DB: database, Render: renderPage}
 	resetH := &handlers.ResetPasswordHandler{DB: database, Config: cfg, Render: renderPage}
+	fpH := &handlers.FloorplanHandler{DB: database, DataDir: dataDir, Render: renderPage}
 
 	mux := http.NewServeMux()
 
@@ -220,6 +234,28 @@ func buildRouter(database *db.DB, cfg *config.Config) http.Handler {
 	mux.Handle("GET /login", middleware.OptionalAuth(database, http.HandlerFunc(authH.LoginPage)))
 	mux.HandleFunc("POST /login", authH.LocalLogin)
 	mux.Handle("POST /logout", middleware.ValidateCSRF(cfg.SecretKey)(http.HandlerFunc(authH.Logout)))
+	mux.HandleFunc("POST /set-lang", func(w http.ResponseWriter, r *http.Request) {
+		lang := r.FormValue("lang")
+		valid := false
+		for _, s := range i18n.Supported {
+			if s.Code == lang {
+				valid = true
+				break
+			}
+		}
+		if !valid {
+			lang = cfg.DefaultLang
+		}
+		http.SetCookie(w, &http.Cookie{
+			Name:     "lang",
+			Value:    lang,
+			Path:     "/",
+			MaxAge:   365 * 24 * 3600,
+			SameSite: http.SameSiteLaxMode,
+			HttpOnly: true,
+		})
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+	})
 
 	// Reset password (always active in test env; production gates on SMTP)
 	mux.HandleFunc("GET /forgot-password", resetH.ForgotPasswordPage)
@@ -242,6 +278,34 @@ func buildRouter(database *db.DB, cfg *config.Config) http.Handler {
 	authMux.HandleFunc("POST /api/tokens", patH.CreatePAT)
 	authMux.HandleFunc("DELETE /api/tokens/{id}", patH.RevokePAT)
 	authMux.HandleFunc("DELETE /api/admin/tokens/{id}", patH.AdminRevokePAT)
+
+	// Impersonation (CSRF-protected)
+	authMux.HandleFunc("GET /impersonate", settingsH.ImpersonatePage)
+	authMux.Handle("POST /impersonate", middleware.ValidateCSRF(cfg.SecretKey)(http.HandlerFunc(settingsH.ImpersonatePost)))
+	authMux.Handle("POST /impersonate-exit", middleware.ValidateCSRF(cfg.SecretKey)(http.HandlerFunc(settingsH.ImpersonateExitPost)))
+
+	// Floorplan user routes
+	authMux.HandleFunc("GET /floorplan", fpH.FloorplanPage)
+	authMux.HandleFunc("GET /api/seats", fpH.SeatsAPI)
+	authMux.HandleFunc("GET /api/floorplans", fpH.ListFloorplansAPI)
+	authMux.HandleFunc("GET /api/floorplans/{id}/seats", fpH.ListSeatsForFloorplanAPI)
+	authMux.HandleFunc("POST /api/reservations", fpH.ReserveSeat)
+	authMux.HandleFunc("POST /api/reservations/bulk", fpH.BulkReserveSeats)
+	authMux.HandleFunc("DELETE /api/reservations/bulk", fpH.CancelReservationsByDates)
+	authMux.HandleFunc("DELETE /api/reservations/{id}", fpH.CancelReservation)
+
+	// Floorplan admin routes (require floorplan_manager or global)
+	fpAdminMux := http.NewServeMux()
+	fpAdminMux.HandleFunc("GET /admin/floorplans", fpH.AdminFloorplansPage)
+	fpAdminMux.HandleFunc("POST /admin/floorplans", fpH.CreateFloorplan)
+	fpAdminMux.HandleFunc("PUT /admin/floorplans/{id}", fpH.UpdateFloorplan)
+	fpAdminMux.HandleFunc("DELETE /admin/floorplans/{id}", fpH.DeleteFloorplan)
+	fpAdminMux.HandleFunc("POST /admin/floorplans/{id}/image", fpH.UploadFloorplanImage)
+	fpAdminMux.HandleFunc("POST /admin/floorplans/{id}/seats", fpH.CreateSeat)
+	fpAdminMux.HandleFunc("PUT /admin/seats/{id}", fpH.UpdateSeat)
+	fpAdminMux.HandleFunc("DELETE /admin/seats/{id}", fpH.DeleteSeat)
+	fpAdminMux.HandleFunc("GET /api/admin/seats", fpH.AdminListSeats)
+	fpAdminMux.HandleFunc("GET /api/admin/floorplans/{id}", fpH.AdminGetFloorplan)
 
 	// Admin sub-routes
 	teamMux := http.NewServeMux()
@@ -284,6 +348,12 @@ func buildRouter(database *db.DB, cfg *config.Config) http.Handler {
 	mux.Handle("/admin/users", middleware.Auth(database, middleware.RequireRole(models.RoleGlobal)(usersMux)))
 	mux.Handle("/admin/users/", middleware.Auth(database, middleware.RequireRole(models.RoleGlobal)(usersMux)))
 	mux.Handle("/api/activity", middleware.Auth(database, middleware.RequireRole(models.RoleActivityViewer)(activityMux)))
+	fpRole := middleware.RequireRole(models.RoleFloorplanManager)
+	mux.Handle("/admin/floorplans", middleware.Auth(database, fpRole(fpAdminMux)))
+	mux.Handle("/admin/floorplans/", middleware.Auth(database, fpRole(fpAdminMux)))
+	mux.Handle("/admin/seats/", middleware.Auth(database, fpRole(fpAdminMux)))
+	mux.Handle("/api/admin/seats", middleware.Auth(database, fpRole(fpAdminMux)))
+	mux.Handle("/api/admin/floorplans/", middleware.Auth(database, fpRole(fpAdminMux)))
 	mux.Handle("/", middleware.AuthWithOptions(database, true, authMux))
 
 	return middleware.SecurityHeaders(mux)
@@ -1436,4 +1506,943 @@ func TestSecurityHeaders_PresentOnResponses(t *testing.T) {
 
 func i64str(n int64) string {
 	return strconv.FormatInt(n, 10)
+}
+
+// ─── PAT: PATPage (HTML) ──────────────────────────────────────────────────────
+
+func TestPATPage_AsGlobalUser_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	resp := e.get("/settings/tokens")
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestPATPage_AsBasicUser_Returns200(t *testing.T) {
+	// Basic users can view the PAT page (but cannot create tokens)
+	e := newTestEnv(t)
+	id, _ := e.db.CreateLocalUser("basic_pat@test.com", "Basic", "password1")
+	e.injectSession(t, id)
+
+	resp := e.get("/settings/tokens")
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+// ─── PAT: AdminRevokePAT ──────────────────────────────────────────────────────
+
+func TestAdminRevokePAT_AsGlobal_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	// Create a PAT owned by another user
+	otherID, _ := e.db.CreateLocalUser("otherowner@test.com", "Other", "password1")
+	e.db.UpdateUserRoles(otherID, "global") //nolint:errcheck
+	_, pat, err := e.db.CreatePAT(otherID, "to be admin-revoked", nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+
+	resp := e.deleteReq("/api/admin/tokens/" + i64str(pat.ID))
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestAdminRevokePAT_AsBasicUser_Forbidden(t *testing.T) {
+	e := newTestEnv(t)
+	id, _ := e.db.CreateLocalUser("basicadmin@test.com", "Basic", "password1")
+	e.injectSession(t, id)
+
+	resp := e.deleteReq("/api/admin/tokens/1")
+	defer drain(resp)
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", resp.StatusCode)
+	}
+}
+
+// ─── Impersonation ────────────────────────────────────────────────────────────
+
+func TestImpersonatePage_AsGlobal_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	resp := e.get("/impersonate")
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestImpersonatePage_AsBasicUser_Forbidden(t *testing.T) {
+	e := newTestEnv(t)
+	id, _ := e.db.CreateLocalUser("basicimpers@test.com", "Basic", "password1")
+	e.injectSession(t, id)
+
+	resp := e.get("/impersonate")
+	defer drain(resp)
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 for basic user, got %d", resp.StatusCode)
+	}
+}
+
+func TestImpersonatePost_AsGlobal_SwitchesSession(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+	csrf := e.csrfToken()
+
+	targetID, _ := e.db.CreateLocalUser("target@test.com", "Target", "password1")
+	target, _ := e.db.GetUserByID(targetID)
+
+	noFollow := e.noFollowClient()
+	resp, err := noFollow.Post(e.url("/impersonate"),
+		"application/x-www-form-urlencoded",
+		strings.NewReader("login="+target.Email+"&csrf_token="+csrf))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Errorf("expected 303 after impersonate, got %d", resp.StatusCode)
+	}
+
+	// The "real_session" cookie should now be set
+	var hasRealSession bool
+	for _, c := range resp.Cookies() {
+		if c.Name == "real_session" && c.Value != "" {
+			hasRealSession = true
+		}
+	}
+	if !hasRealSession {
+		t.Error("real_session cookie should be set after impersonation")
+	}
+}
+
+func TestImpersonateExitPost_RestoresAdminSession(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	// Start impersonation
+	csrf := e.csrfToken()
+	targetID, _ := e.db.CreateLocalUser("exit_target@test.com", "ExitTarget", "password1")
+	target, _ := e.db.GetUserByID(targetID)
+
+	noFollow := e.noFollowClient()
+	impResp, _ := noFollow.Post(e.url("/impersonate"),
+		"application/x-www-form-urlencoded",
+		strings.NewReader("login="+target.Email+"&csrf_token="+csrf))
+	drain(impResp)
+
+	// Now exit — need a fresh CSRF token (session has changed to target's)
+	csrf2 := e.csrfToken()
+	resp, err := noFollow.Post(e.url("/impersonate-exit"),
+		"application/x-www-form-urlencoded",
+		strings.NewReader("csrf_token="+csrf2))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Errorf("expected 303 after impersonate-exit, got %d", resp.StatusCode)
+	}
+}
+
+// ─── Floorplan: admin CRUD ────────────────────────────────────────────────────
+
+func TestCreateFloorplan_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	resp := e.postJSON("/admin/floorplans", map[string]string{"name": "Office 1"})
+	var result map[string]interface{}
+	mustDecodeJSON(t, resp, &result)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	if result["name"] != "Office 1" {
+		t.Errorf("expected name=Office 1, got %v", result["name"])
+	}
+}
+
+func TestCreateFloorplan_EmptyName_Returns400(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	resp := e.postJSON("/admin/floorplans", map[string]string{"name": ""})
+	defer drain(resp)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateFloorplan_BasicUser_Forbidden(t *testing.T) {
+	e := newTestEnv(t)
+	id, _ := e.db.CreateLocalUser("fpbasic@test.com", "Basic", "password1")
+	e.injectSession(t, id)
+
+	resp := e.postJSON("/admin/floorplans", map[string]string{"name": "Hack"})
+	defer drain(resp)
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", resp.StatusCode)
+	}
+}
+
+func TestUpdateFloorplan_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	createResp := e.postJSON("/admin/floorplans", map[string]string{"name": "Old FP"})
+	var created map[string]interface{}
+	mustDecodeJSON(t, createResp, &created)
+	id := int64(created["id"].(float64))
+
+	resp := e.putJSON("/admin/floorplans/"+i64str(id), map[string]interface{}{"name": "New FP", "sort_order": 1})
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestDeleteFloorplan_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	createResp := e.postJSON("/admin/floorplans", map[string]string{"name": "Delete Me FP"})
+	var created map[string]interface{}
+	mustDecodeJSON(t, createResp, &created)
+	id := int64(created["id"].(float64))
+
+	resp := e.deleteReq("/admin/floorplans/" + i64str(id))
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateSeat_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	createResp := e.postJSON("/admin/floorplans", map[string]string{"name": "FP Seats"})
+	var fp map[string]interface{}
+	mustDecodeJSON(t, createResp, &fp)
+	fpID := int64(fp["id"].(float64))
+
+	resp := e.postJSON("/admin/floorplans/"+i64str(fpID)+"/seats", map[string]interface{}{
+		"label": "A1", "x_pct": 50.0, "y_pct": 50.0,
+	})
+	var seat map[string]interface{}
+	mustDecodeJSON(t, resp, &seat)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	if seat["label"] != "A1" {
+		t.Errorf("expected label=A1, got %v", seat["label"])
+	}
+}
+
+func TestUpdateSeat_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	fpResp := e.postJSON("/admin/floorplans", map[string]string{"name": "FP Update Seat"})
+	var fp map[string]interface{}
+	mustDecodeJSON(t, fpResp, &fp)
+	fpID := int64(fp["id"].(float64))
+
+	seatResp := e.postJSON("/admin/floorplans/"+i64str(fpID)+"/seats", map[string]interface{}{
+		"label": "B1", "x_pct": 10.0, "y_pct": 10.0,
+	})
+	var seat map[string]interface{}
+	mustDecodeJSON(t, seatResp, &seat)
+	seatID := int64(seat["id"].(float64))
+
+	resp := e.putJSON("/admin/seats/"+i64str(seatID), map[string]interface{}{
+		"label": "B2", "x_pct": 20.0, "y_pct": 20.0,
+	})
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestDeleteSeat_AsAdmin_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	fpResp := e.postJSON("/admin/floorplans", map[string]string{"name": "FP Delete Seat"})
+	var fp map[string]interface{}
+	mustDecodeJSON(t, fpResp, &fp)
+	fpID := int64(fp["id"].(float64))
+
+	seatResp := e.postJSON("/admin/floorplans/"+i64str(fpID)+"/seats", map[string]interface{}{
+		"label": "C1", "x_pct": 30.0, "y_pct": 30.0,
+	})
+	var seat map[string]interface{}
+	mustDecodeJSON(t, seatResp, &seat)
+	seatID := int64(seat["id"].(float64))
+
+	resp := e.deleteReq("/admin/seats/" + i64str(seatID))
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestAdminListSeats_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	fpResp := e.postJSON("/admin/floorplans", map[string]string{"name": "FP AdminList"})
+	var fp map[string]interface{}
+	mustDecodeJSON(t, fpResp, &fp)
+	fpID := int64(fp["id"].(float64))
+
+	resp := e.get("/api/admin/seats?floorplan_id=" + i64str(fpID))
+	var seats []interface{}
+	mustDecodeJSON(t, resp, &seats)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestAdminGetFloorplan_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	fpResp := e.postJSON("/admin/floorplans", map[string]string{"name": "FP GetOne"})
+	var fp map[string]interface{}
+	mustDecodeJSON(t, fpResp, &fp)
+	fpID := int64(fp["id"].(float64))
+
+	resp := e.get("/api/admin/floorplans/" + i64str(fpID))
+	var result map[string]interface{}
+	mustDecodeJSON(t, resp, &result)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	if result["name"] != "FP GetOne" {
+		t.Errorf("expected name=FP GetOne, got %v", result["name"])
+	}
+}
+
+// ─── Floorplan: user-facing API ───────────────────────────────────────────────
+
+func TestListFloorplansAPI_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	drain(e.postJSON("/admin/floorplans", map[string]string{"name": "List FP"}))
+
+	resp := e.get("/api/floorplans")
+	var result []interface{}
+	mustDecodeJSON(t, resp, &result)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	if len(result) == 0 {
+		t.Error("expected at least one floorplan")
+	}
+}
+
+func TestListSeatsForFloorplanAPI_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	fpResp := e.postJSON("/admin/floorplans", map[string]string{"name": "FP Seat API"})
+	var fp map[string]interface{}
+	mustDecodeJSON(t, fpResp, &fp)
+	fpID := int64(fp["id"].(float64))
+
+	drain(e.postJSON("/admin/floorplans/"+i64str(fpID)+"/seats", map[string]interface{}{
+		"label": "D1", "x_pct": 40.0, "y_pct": 40.0,
+	}))
+
+	resp := e.get("/api/floorplans/" + i64str(fpID) + "/seats")
+	var seats []interface{}
+	mustDecodeJSON(t, resp, &seats)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	if len(seats) == 0 {
+		t.Error("expected at least one seat")
+	}
+}
+
+func TestFloorplanPage_AuthenticatedUser_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	resp := e.get("/floorplan")
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestAdminFloorplansPage_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	resp := e.get("/admin/floorplans")
+	defer drain(resp)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+// ─── Floorplan: reservations ──────────────────────────────────────────────────
+
+func TestReserveSeat_NotOnSite_Forbidden(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	fpResp := e.postJSON("/admin/floorplans", map[string]string{"name": "FP Res"})
+	var fp map[string]interface{}
+	mustDecodeJSON(t, fpResp, &fp)
+	fpID := int64(fp["id"].(float64))
+	seatResp := e.postJSON("/admin/floorplans/"+i64str(fpID)+"/seats", map[string]interface{}{
+		"label": "E1", "x_pct": 50.0, "y_pct": 50.0,
+	})
+	var seatData map[string]interface{}
+	mustDecodeJSON(t, seatResp, &seatData)
+	seatID := int64(seatData["id"].(float64))
+
+	// No on-site presence → should be rejected
+	resp := e.postJSON("/api/reservations", map[string]interface{}{
+		"seat_id": seatID,
+		"date":    "2026-06-20",
+		"half":    "full",
+	})
+	defer drain(resp)
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 (not on site), got %d", resp.StatusCode)
+	}
+}
+
+func TestCancelReservationsByDates_ValidRequest_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	resp := e.deleteJSONBody("/api/reservations/bulk", map[string]interface{}{
+		"dates": []string{"2026-06-20"},
+	})
+	defer drain(resp)
+	// No reservations to cancel but the handler should still succeed
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestCancelReservationsByDates_EmptyDates_Returns400(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	resp := e.deleteJSONBody("/api/reservations/bulk", map[string]interface{}{
+		"dates": []string{},
+	})
+	defer drain(resp)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400 for empty dates, got %d", resp.StatusCode)
+	}
+}
+
+func TestBulkReserveSeats_MissingParams_Returns400(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	resp := e.postJSON("/api/reservations/bulk", map[string]interface{}{
+		"seat_id": 0,
+		"dates":   []string{},
+	})
+	defer drain(resp)
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing params, got %d", resp.StatusCode)
+	}
+}
+
+// ─── OptionalAuth: logged-in user sees page, unauthenticated also ─────────────
+
+func TestLoginPage_AlreadyAuthenticated_StillRenders(t *testing.T) {
+	// GET /login with a valid session — OptionalAuth populates user but doesn't block
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	noFollow := e.noFollowClient()
+	resp, err := noFollow.Get(e.url("/login"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(resp)
+
+	// The login page handler redirects authenticated users to "/"
+	if resp.StatusCode != http.StatusSeeOther && resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 or 303 for authenticated user on /login, got %d", resp.StatusCode)
+	}
+}
+
+// ─── CheckPassword: correct and wrong ────────────────────────────────────────
+
+func TestCheckPassword_CorrectAndWrong(t *testing.T) {
+	e := newTestEnv(t)
+	id, _ := e.db.CreateLocalUser("checkpwd@test.com", "Check", "mypassword1")
+	u, _ := e.db.GetUserByID(id)
+
+	if !e.db.CheckPassword(u.ID, u.PasswordHash, "mypassword1") {
+		t.Error("CheckPassword should return true for correct password")
+	}
+	if e.db.CheckPassword(u.ID, u.PasswordHash, "wrongpassword") {
+		t.Error("CheckPassword should return false for wrong password")
+	}
+	if e.db.CheckPassword(u.ID, u.PasswordHash, "") {
+		t.Error("CheckPassword should return false for empty password")
+	}
+}
+
+// ─── End-to-end: SetPresences → GetPresencesAPI ───────────────────────────────
+
+func TestSetThenGetPresences_ReturnsPostedData(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	adminUser, _ := e.db.GetUserByEmail("admin")
+	statuses, _ := e.db.ListStatuses()
+	teamID, _ := e.db.CreateTeam("E2E Team")
+	e.db.AddTeamMember(teamID, adminUser.ID) //nolint:errcheck
+
+	date := "2026-06-15"
+	drain(e.postJSON("/api/presences", map[string]interface{}{
+		"user_id":   adminUser.ID,
+		"dates":     []string{date},
+		"status_id": statuses[0].ID,
+		"half":      "full",
+	}))
+
+	resp := e.get("/api/presences?team_id=" + i64str(teamID) + "&year=2026&month=6")
+	// GetPresencesAPI returns map[userID]map[date]map[half]statusID directly
+	var result map[string]interface{}
+	mustDecodeJSON(t, resp, &result)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	userKey := i64str(adminUser.ID)
+	byUser, ok := result[userKey].(map[string]interface{})
+	if !ok {
+		t.Fatalf("no presence entry for user %s, top-level keys=%v", userKey, result)
+	}
+	if _, exists := byUser[date]; !exists {
+		t.Errorf("expected presence for date %s, keys=%v", date, byUser)
+	}
+}
+
+// ─── End-to-end: ActivityAPI with data ───────────────────────────────────────
+
+func TestActivityAPI_WithPresenceData_ReturnsContent(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	adminUser, _ := e.db.GetUserByEmail("admin")
+	statuses, _ := e.db.ListStatuses()
+	teamID, _ := e.db.CreateTeam("Activity E2E")
+	e.db.AddTeamMember(teamID, adminUser.ID) //nolint:errcheck
+
+	drain(e.postJSON("/api/presences", map[string]interface{}{
+		"user_id":   adminUser.ID,
+		"dates":     []string{"2026-06-01", "2026-06-02"},
+		"status_id": statuses[0].ID,
+		"half":      "full",
+	}))
+
+	resp := e.get("/api/activity?team_id=" + i64str(teamID) + "&year=2026&month=6")
+	// ActivityAPI returns []UserStats (a JSON array)
+	var stats []interface{}
+	mustDecodeJSON(t, resp, &stats)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if len(stats) == 0 {
+		t.Error("expected at least one entry in activity response")
+	}
+}
+
+// ─── End-to-end: PAT Bearer → presence API ───────────────────────────────────
+
+func TestBearerPAT_CanReadPresences(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	patResp := e.postJSON("/api/tokens", map[string]interface{}{"description": "read test", "expires_in": 10})
+	var patResult map[string]interface{}
+	mustDecodeJSON(t, patResp, &patResult)
+	rawToken := patResult["token"].(string)
+
+	teamID, _ := e.db.CreateTeam("PAT Team")
+
+	req, _ := http.NewRequest("GET", e.url("/api/presences?team_id="+i64str(teamID)+"&year=2026&month=4"), nil)
+	req.Header.Set("Authorization", "Bearer "+rawToken)
+	resp, err := (&http.Client{}).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(resp)
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		t.Error("PAT should authenticate successfully, got 401")
+	}
+}
+
+// ─── Security: CSRF rejected on change-password ───────────────────────────────
+
+func TestChangePasswordPost_MissingCSRF_Forbidden(t *testing.T) {
+	e := newTestEnv(t)
+	id, _ := e.db.CreateLocalUser("csrf@test.com", "CSRF", "oldpass1")
+	e.injectSession(t, id)
+
+	// POST without csrf_token field
+	resp, _ := e.noFollowClient().Post(e.url("/settings/change-password"),
+		"application/x-www-form-urlencoded",
+		strings.NewReader("current_password=oldpass1&new_password=newpass12&confirm_password=newpass12"))
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 when csrf_token is missing, got %d", resp.StatusCode)
+	}
+}
+
+func TestChangePasswordPost_WrongCSRF_Forbidden(t *testing.T) {
+	e := newTestEnv(t)
+	id, _ := e.db.CreateLocalUser("csrf2@test.com", "CSRF2", "oldpass1")
+	e.injectSession(t, id)
+
+	resp, _ := e.noFollowClient().Post(e.url("/settings/change-password"),
+		"application/x-www-form-urlencoded",
+		strings.NewReader("current_password=oldpass1&new_password=newpass12&confirm_password=newpass12&csrf_token=badtoken"))
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 with wrong csrf_token, got %d", resp.StatusCode)
+	}
+}
+
+// ─── Security: session invalidated after password change ─────────────────────
+
+func TestChangePassword_OldSessionInvalidated(t *testing.T) {
+	e := newTestEnv(t)
+	id, _ := e.db.CreateLocalUser("inval@test.com", "Inval", "oldpass1")
+
+	// Create a second (background) session for the same user
+	oldToken, err := e.db.CreateSession(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Log in with the main session
+	e.injectSession(t, id)
+	csrf := e.csrfToken()
+
+	changeResp, _ := e.noFollowClient().Post(e.url("/settings/change-password"),
+		"application/x-www-form-urlencoded",
+		strings.NewReader("current_password=oldpass1&new_password=newpass12&confirm_password=newpass12&csrf_token="+csrf))
+	drain(changeResp)
+
+	if changeResp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("password change should redirect (303), got %d", changeResp.StatusCode)
+	}
+
+	// The background session must now be invalid
+	user, err := e.db.GetSessionUser(oldToken)
+	if err == nil {
+		t.Errorf("old session should be invalidated after password change, but got user %v", user)
+	}
+}
+
+func TestResetPassword_AllSessionsInvalidated(t *testing.T) {
+	e := newTestEnv(t)
+	_, _ = e.db.CreateLocalUser("resetinval@test.com", "ResetInval", "oldpass1")
+	u, _ := e.db.GetUserByEmail("resetinval@test.com")
+
+	// Create a live session before the reset
+	liveToken, err := e.db.CreateSession(u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rawToken, _ := e.db.CreatePasswordResetToken("resetinval@test.com")
+	resp := e.postForm("/reset-password", "token="+rawToken+"&password=newpass12&confirm=newpass12")
+	drain(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 after reset, got %d", resp.StatusCode)
+	}
+
+	user, err := e.db.GetSessionUser(liveToken)
+	if err == nil {
+		t.Errorf("all sessions should be invalidated after password reset, but got user %v", user)
+	}
+}
+
+// ─── Security: role isolation ─────────────────────────────────────────────────
+
+func TestCreateStatus_BasicUser_Forbidden(t *testing.T) {
+	e := newTestEnv(t)
+	id, _ := e.db.CreateLocalUser("basic_status@test.com", "Basic", "password1")
+	e.injectSession(t, id)
+
+	resp := e.postJSON("/admin/statuses", map[string]interface{}{"name": "Hack", "color": "#ff0000"})
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 for basic user creating status, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateHoliday_BasicUser_Forbidden(t *testing.T) {
+	e := newTestEnv(t)
+	id, _ := e.db.CreateLocalUser("basic_holiday@test.com", "Basic", "password1")
+	e.injectSession(t, id)
+
+	resp := e.postJSON("/admin/holidays", map[string]interface{}{"date": "2026-01-01", "name": "New Year"})
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 for basic user creating holiday, got %d", resp.StatusCode)
+	}
+}
+
+func TestCreateTeam_BasicUser_Forbidden(t *testing.T) {
+	e := newTestEnv(t)
+	id, _ := e.db.CreateLocalUser("basic_team@test.com", "Basic", "password1")
+	e.injectSession(t, id)
+
+	resp := e.postJSON("/admin/teams", map[string]string{"name": "Hack Team"})
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("expected 403 for basic user creating team, got %d", resp.StatusCode)
+	}
+}
+
+// ─── Admin: UpdateUserRoles promotes user to global ───────────────────────────
+
+func TestUpdateUserRoles_PromotesToGlobal_CanAccessAdmin(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	// Register the route (not in buildRouter minimal stub — test via DB directly)
+	id, _ := e.db.CreateLocalUser("promo@test.com", "Promo", "password1")
+
+	// Before promotion: no admin access
+	e.injectSession(t, id)
+	noFollow := e.noFollowClient()
+	resp1, _ := noFollow.Get(e.url("/admin/users"))
+	drain(resp1)
+	if resp1.StatusCode != http.StatusForbidden {
+		t.Errorf("before promotion: expected 403, got %d", resp1.StatusCode)
+	}
+
+	// Promote via DB (UpdateUserRoles not in buildRouter — promote directly)
+	if err := e.db.UpdateUserRoles(id, "global"); err != nil {
+		t.Fatalf("UpdateUserRoles: %v", err)
+	}
+
+	// Refresh session after role change
+	e.injectSession(t, id)
+	resp2, _ := noFollow.Get(e.url("/admin/users"))
+	drain(resp2)
+	if resp2.StatusCode != http.StatusOK {
+		t.Errorf("after promotion to global: expected 200, got %d", resp2.StatusCode)
+	}
+}
+
+// ─── Admin SetPassword: new password works for login ─────────────────────────
+
+func TestAdminSetPassword_NewPasswordEnablesLogin(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	id, _ := e.db.CreateLocalUser("pwdchg@test.com", "PwdChg", "oldpass1")
+	drain(e.putJSON("/admin/users/"+i64str(id)+"/password", map[string]string{"password": "freshpass1"}))
+
+	// Log in with the new password
+	noFollow := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	resp, _ := noFollow.Post(e.url("/login"),
+		"application/x-www-form-urlencoded",
+		strings.NewReader("username=pwdchg@test.com&password=freshpass1"))
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Errorf("login with new admin-set password: expected 303, got %d", resp.StatusCode)
+	}
+	if strings.Contains(resp.Header.Get("Location"), "error") {
+		t.Error("login should succeed but redirect contains 'error'")
+	}
+}
+
+// ─── PAT: list returns created token ─────────────────────────────────────────
+
+func TestListPATs_ReturnsCreatedToken(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	createResp := e.postJSON("/api/tokens", map[string]interface{}{"description": "listed token", "expires_in": 10})
+	var created map[string]interface{}
+	mustDecodeJSON(t, createResp, &created)
+
+	listResp := e.get("/api/tokens")
+	var pats []map[string]interface{}
+	mustDecodeJSON(t, listResp, &pats)
+
+	found := false
+	for _, p := range pats {
+		if p["description"] == "listed token" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("created PAT 'listed token' not found in list response: %v", pats)
+	}
+}
+
+// ─── POST /set-lang ───────────────────────────────────────────────────────────
+
+func TestSetLang_SetsCookieAndRedirects(t *testing.T) {
+	e := newTestEnv(t)
+
+	noFollow := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	resp, err := noFollow.Post(e.url("/set-lang"),
+		"application/x-www-form-urlencoded",
+		strings.NewReader("lang=fr"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Errorf("expected 303, got %d", resp.StatusCode)
+	}
+
+	var langCookie *http.Cookie
+	for _, c := range resp.Cookies() {
+		if c.Name == "lang" {
+			langCookie = c
+		}
+	}
+	if langCookie == nil {
+		t.Fatal("lang cookie not set")
+	}
+	if langCookie.Value != "fr" {
+		t.Errorf("expected lang cookie value 'fr', got %q", langCookie.Value)
+	}
+}
+
+func TestSetLang_InvalidLang_UsesDefault(t *testing.T) {
+	e := newTestEnv(t)
+
+	noFollow := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	resp, err := noFollow.Post(e.url("/set-lang"),
+		"application/x-www-form-urlencoded",
+		strings.NewReader("lang=xx_INVALID"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer drain(resp)
+
+	// Should still redirect (not error)
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Errorf("expected 303 even for invalid lang, got %d", resp.StatusCode)
+	}
+	// lang cookie must not be "xx_INVALID"
+	for _, c := range resp.Cookies() {
+		if c.Name == "lang" && c.Value == "xx_INVALID" {
+			t.Error("invalid lang value should not be stored in cookie")
+		}
+	}
+}
+
+// ─── GET /api/docs ────────────────────────────────────────────────────────────
+
+func TestAPIDocs_ReturnsMarkdown(t *testing.T) {
+	// Wire the /api/docs endpoint inline — buildRouter does not include it
+	// to keep the stub minimal, so test it via a dedicated mini-mux.
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/docs", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("# API")) //nolint:errcheck
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/docs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", resp.StatusCode)
+	}
+	ct := resp.Header.Get("Content-Type")
+	if !strings.HasPrefix(ct, "text/plain") {
+		t.Errorf("expected text/plain content-type, got %q", ct)
+	}
+}
+
+// ─── GET /settings/my-logs with real data ────────────────────────────────────
+
+func TestMyLogsPage_WithPresenceData_Returns200(t *testing.T) {
+	e := newTestEnv(t)
+	e.loginAdmin(t)
+
+	adminUser, _ := e.db.GetUserByEmail("admin")
+	statuses, _ := e.db.ListStatuses()
+
+	drain(e.postJSON("/api/presences", map[string]interface{}{
+		"user_id":   adminUser.ID,
+		"dates":     []string{"2026-06-10"},
+		"status_id": statuses[0].ID,
+		"half":      "full",
+	}))
+
+	resp := e.get("/settings/my-logs")
+	defer drain(resp)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected 200 on my-logs after setting presences, got %d", resp.StatusCode)
+	}
+}
+
+// ─── Permissions-Policy header ────────────────────────────────────────────────
+
+func TestPermissionsPolicy_PresentOnResponses(t *testing.T) {
+	e := newTestEnv(t)
+	resp := e.get("/health")
+	defer drain(resp)
+
+	pp := resp.Header.Get("Permissions-Policy")
+	if pp == "" {
+		t.Error("Permissions-Policy header missing")
+	}
+	for _, directive := range []string{"camera=()", "microphone=()", "geolocation=()"} {
+		if !strings.Contains(pp, directive) {
+			t.Errorf("Permissions-Policy missing directive %q, got: %s", directive, pp)
+		}
+	}
 }

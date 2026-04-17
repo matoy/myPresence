@@ -2,6 +2,7 @@ package db
 
 import (
 	"testing"
+	"time"
 )
 
 // newTestDB opens an isolated in-memory-style SQLite DB in a temp directory.
@@ -235,5 +236,221 @@ func TestCancelUserReservationsForDates_PreservesOtherUser(t *testing.T) {
 	m, _ := d.GetUserReservationDates(bob, "2026-04-01", "2026-04-30")
 	if !m["2026-04-15"] {
 		t.Error("bob's reservation should not have been deleted")
+	}
+}
+
+// -----------------------------------------------------------------------
+// Counts
+// -----------------------------------------------------------------------
+
+func TestCounts_ReturnsNonZeroAfterSeed(t *testing.T) {
+	d := newTestDB(t)
+
+	// Seed explicit data so Counts is non-zero
+	seedUser(t, d, "count_user@test.com")
+	seedOnSiteStatus(t, d)
+
+	c := d.Counts()
+	if c.Users == 0 {
+		t.Error("expected at least 1 user")
+	}
+	if c.Statuses == 0 {
+		t.Error("expected at least 1 status")
+	}
+}
+
+func TestCounts_IncrementsOnInsert(t *testing.T) {
+	d := newTestDB(t)
+	before := d.Counts()
+
+	seedUser(t, d, "extra@test.com")
+	after := d.Counts()
+
+	if after.Users <= before.Users {
+		t.Errorf("Users count should increase after insert: before=%d after=%d", before.Users, after.Users)
+	}
+}
+
+func TestCounts_FloorplansAndSeats(t *testing.T) {
+	d := newTestDB(t)
+	seedFloorplanAndSeat(t, d, "Z1")
+	c := d.Counts()
+	if c.Floorplans == 0 {
+		t.Error("expected at least 1 floorplan")
+	}
+	if c.Seats == 0 {
+		t.Error("expected at least 1 seat")
+	}
+}
+
+// -----------------------------------------------------------------------
+// CleanExpiredSessions
+// -----------------------------------------------------------------------
+
+func TestCleanExpiredSessions_RemovesExpired(t *testing.T) {
+	d := newTestDB(t)
+	userID := seedUser(t, d, "session@test.com")
+
+	// Insert a session that expired in the past
+	_, err := d.core.Exec(
+		`INSERT INTO sessions (id, user_id, expires_at) VALUES ('deadbeef', ?, datetime('now', '-1 hour'))`,
+		userID,
+	)
+	if err != nil {
+		t.Fatalf("insert expired session: %v", err)
+	}
+
+	var before int
+	d.core.QueryRow("SELECT COUNT(*) FROM sessions WHERE id='deadbeef'").Scan(&before) //nolint:errcheck
+	if before != 1 {
+		t.Fatal("expired session not inserted correctly")
+	}
+
+	d.CleanExpiredSessions()
+
+	var after int
+	d.core.QueryRow("SELECT COUNT(*) FROM sessions WHERE id='deadbeef'").Scan(&after) //nolint:errcheck
+	if after != 0 {
+		t.Error("expired session should have been deleted")
+	}
+}
+
+func TestCleanExpiredSessions_PreservesValid(t *testing.T) {
+	d := newTestDB(t)
+	userID := seedUser(t, d, "valid@test.com")
+
+	// Create a normal (valid) session via the API
+	tok, err := d.CreateSession(userID)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	d.CleanExpiredSessions()
+
+	// Session should still exist
+	u, err := d.GetSessionUser(tok)
+	if err != nil {
+		t.Errorf("valid session should survive CleanExpiredSessions: %v", err)
+	}
+	if u.ID != userID {
+		t.Errorf("got wrong user after clean: %d", u.ID)
+	}
+}
+
+// -----------------------------------------------------------------------
+// CleanExpiredResetTokens
+// -----------------------------------------------------------------------
+
+func TestCleanExpiredResetTokens_RemovesExpired(t *testing.T) {
+	d := newTestDB(t)
+	_, err := d.CreateLocalUser("reset@test.com", "Reset", "password1")
+	if err != nil {
+		t.Fatalf("CreateLocalUser: %v", err)
+	}
+
+	// Create a token, then artificially expire it
+	rawToken, err := d.CreatePasswordResetToken("reset@test.com")
+	if err != nil || rawToken == "" {
+		t.Fatalf("CreatePasswordResetToken: err=%v token=%q", err, rawToken)
+	}
+
+	// Expire it
+	d.core.Exec(`UPDATE password_reset_tokens SET expires_at = datetime('now', '-1 hour')`) //nolint:errcheck
+
+	var before int
+	d.core.QueryRow("SELECT COUNT(*) FROM password_reset_tokens").Scan(&before) //nolint:errcheck
+	if before == 0 {
+		t.Fatal("token should be present before clean")
+	}
+
+	d.CleanExpiredResetTokens()
+
+	var after int
+	d.core.QueryRow("SELECT COUNT(*) FROM password_reset_tokens").Scan(&after) //nolint:errcheck
+	if after != 0 {
+		t.Errorf("expired reset token should have been deleted, count=%d", after)
+	}
+}
+
+func TestCleanExpiredResetTokens_PreservesValid(t *testing.T) {
+	d := newTestDB(t)
+	_, err := d.CreateLocalUser("resetvalid@test.com", "ResetValid", "password1")
+	if err != nil {
+		t.Fatalf("CreateLocalUser: %v", err)
+	}
+
+	rawToken, _ := d.CreatePasswordResetToken("resetvalid@test.com")
+	if rawToken == "" {
+		t.Fatal("expected non-empty reset token")
+	}
+
+	d.CleanExpiredResetTokens()
+
+	// Token should still be valid
+	u, err := d.UsePasswordResetToken(rawToken)
+	if err != nil {
+		t.Errorf("valid token should survive CleanExpiredResetTokens: %v", err)
+	}
+	if u == nil || u.Email != "resetvalid@test.com" {
+		t.Error("UsePasswordResetToken returned wrong user")
+	}
+}
+
+// -----------------------------------------------------------------------
+// AdminRevokePAT / ListAllPATs
+// -----------------------------------------------------------------------
+
+func TestAdminRevokePAT_RevokesAnyToken(t *testing.T) {
+	d := newTestDB(t)
+	userID := seedUser(t, d, "patowner@test.com")
+	// Give user a non-basic role so PAT creation is possible
+	d.core.Exec("UPDATE users SET role='global' WHERE id=?", userID) //nolint:errcheck
+
+	_, pat, err := d.CreatePAT(userID, "admin-revoke-test", nil)
+	if err != nil {
+		t.Fatalf("CreatePAT: %v", err)
+	}
+
+	if err := d.AdminRevokePAT(pat.ID); err != nil {
+		t.Errorf("AdminRevokePAT: %v", err)
+	}
+
+	// Should be gone
+	pats, _ := d.ListUserPATs(userID)
+	for _, p := range pats {
+		if p.ID == pat.ID {
+			t.Error("PAT should have been deleted by AdminRevokePAT")
+		}
+	}
+}
+
+func TestAdminRevokePAT_NotFound_ReturnsError(t *testing.T) {
+	d := newTestDB(t)
+	if err := d.AdminRevokePAT(99999); err == nil {
+		t.Error("expected error for non-existent PAT ID")
+	}
+}
+
+func TestListAllPATs_ReturnsAllUsers(t *testing.T) {
+	d := newTestDB(t)
+	u1 := seedUser(t, d, "p1@test.com")
+	u2 := seedUser(t, d, "p2@test.com")
+
+	expires := time.Now().Add(24 * time.Hour)
+	d.CreatePAT(u1, "token1", &expires) //nolint:errcheck
+	d.CreatePAT(u2, "token2", &expires) //nolint:errcheck
+
+	all, err := d.ListAllPATs()
+	if err != nil {
+		t.Fatalf("ListAllPATs: %v", err)
+	}
+	if len(all) < 2 {
+		t.Errorf("expected at least 2 tokens, got %d", len(all))
+	}
+	// Verify UserName is populated
+	for _, p := range all {
+		if p.UserName == "" {
+			t.Errorf("PAT ID=%d has empty UserName", p.ID)
+		}
 	}
 }
