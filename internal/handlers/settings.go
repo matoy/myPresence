@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -188,6 +189,7 @@ func (h *SettingsHandler) ImpersonatePost(w http.ResponseWriter, r *http.Request
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
+	slog.Info("impersonate.start", "admin", admin.Email, "target", target.Email)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -217,5 +219,6 @@ func (h *SettingsHandler) ImpersonateExitPost(w http.ResponseWriter, r *http.Req
 		SameSite: http.SameSiteLaxMode,
 	})
 	http.SetCookie(w, &http.Cookie{Name: "real_session", MaxAge: -1, Path: "/"})
+	slog.Info("impersonate.exit", "admin", adminUser.Email)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

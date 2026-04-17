@@ -2,8 +2,10 @@ package middleware
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 
 	"presence-app/internal/db"
 	"presence-app/internal/models"
@@ -89,5 +91,44 @@ func OptionalAuth(database *db.DB, next http.Handler) http.Handler {
 			}
 		}
 		next.ServeHTTP(w, r)
+	})
+}
+
+// responseWriter captures the HTTP status code written by a handler.
+type responseWriter struct {
+	http.ResponseWriter
+	status int
+}
+
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.status = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+// AccessLog logs every HTTP request as a structured JSON line to stdout.
+func AccessLog(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rw, r)
+
+		// Skip metrics and health-check endpoints to avoid log noise
+		if r.URL.Path == "/metrics" || r.URL.Path == "/health" {
+			return
+		}
+
+		// Resolve remote IP (honour X-Forwarded-For set by a trusted proxy)
+		ip := r.RemoteAddr
+		if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+			ip = strings.SplitN(fwd, ",", 2)[0]
+		}
+
+		slog.Info("http.request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", rw.status,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"ip", ip,
+		)
 	})
 }

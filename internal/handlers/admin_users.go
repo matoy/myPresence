@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -66,6 +67,7 @@ func (h *UsersAdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) {
 	currentUser := middleware.GetUser(r)
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "user", uid, "create", req.Email)
+		slog.Info("admin.user.create", "actor", currentUser.Email, "new_user", req.Email)
 	}
 	jsonOK(w, map[string]interface{}{"id": uid, "status": "ok"})
 }
@@ -91,6 +93,7 @@ func (h *UsersAdminHandler) UpdateUser(w http.ResponseWriter, r *http.Request) {
 	currentUser := middleware.GetUser(r)
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "user", id, "update", req.Email+" "+req.Name)
+		slog.Info("admin.user.update", "actor", currentUser.Email, "target_id", id, "email", req.Email)
 	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
@@ -143,6 +146,7 @@ func (h *UsersAdminHandler) SetDisabled(w http.ResponseWriter, r *http.Request) 
 			action = "set_disabled"
 		}
 		h.DB.LogAdminAction(currentUser.ID, "user", id, action, "")
+		slog.Info("admin.user.disabled", "actor", currentUser.Email, "target_id", id, "disabled", req.Disabled)
 	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
@@ -166,6 +170,12 @@ func (h *UsersAdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) {
 			details = targetUser.Name + " <" + targetUser.Email + ">"
 		}
 		h.DB.LogAdminAction(currentUser.ID, "user", id, "delete", details)
+		slog.Info("admin.user.delete", "actor", currentUser.Email, "target_id", id, "target_email", func() string {
+			if targetUser != nil {
+				return targetUser.Email
+			}
+			return ""
+		}())
 	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }

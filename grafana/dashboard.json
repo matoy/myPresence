@@ -7,6 +7,14 @@
       "type": "datasource",
       "pluginId": "prometheus",
       "pluginName": "Prometheus"
+    },
+    {
+      "name": "DS_LOKI",
+      "label": "Loki",
+      "description": "Loki log datasource",
+      "type": "datasource",
+      "pluginId": "loki",
+      "pluginName": "Loki"
     }
   ],
   "__requires": [
@@ -20,6 +28,12 @@
       "type": "datasource",
       "id": "prometheus",
       "name": "Prometheus",
+      "version": "1.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "loki",
+      "name": "Loki",
       "version": "1.0.0"
     },
     {
@@ -56,6 +70,12 @@
       "type": "panel",
       "id": "barchart",
       "name": "Bar chart",
+      "version": ""
+    },
+    {
+      "type": "panel",
+      "id": "logs",
+      "name": "Logs",
       "version": ""
     }
   ],
@@ -2011,6 +2031,102 @@
           }
         }
       ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 82 },
+      "id": 70,
+      "title": "📋 Application Logs",
+      "type": "row"
+    },
+    {
+      "id": 71,
+      "type": "logs",
+      "title": "All application logs",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 83 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none",
+        "enableLogDetails": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{job=\"mypresence\"}",
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" }
+        }
+      ]
+    },
+    {
+      "id": 72,
+      "type": "logs",
+      "title": "Auth events",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 91 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none",
+        "enableLogDetails": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{job=\"mypresence\"} | json | msg =~ `auth\\..*`",
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" }
+        }
+      ]
+    },
+    {
+      "id": 73,
+      "type": "logs",
+      "title": "Presence & admin operations",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 91 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none",
+        "enableLogDetails": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{job=\"mypresence\"} | json | msg =~ `(presence|admin|impersonate)\\..*`",
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" }
+        }
+      ]
+    },
+    {
+      "id": 74,
+      "type": "logs",
+      "title": "Errors & warnings",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 99 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none",
+        "enableLogDetails": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "{job=\"mypresence\", level=~\"WARN|ERROR\"}",
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" }
+        }
+      ]
     }
   ],
   "refresh": "30s",
@@ -2033,6 +2149,17 @@
         "refresh": 1,
         "type": "datasource",
         "label": "Datasource"
+      },
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "name": "DS_LOKI",
+        "options": [],
+        "query": "loki",
+        "refresh": 1,
+        "type": "datasource",
+        "label": "Loki"
       }
     ]
   },

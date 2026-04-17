@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"io/fs"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -35,27 +36,33 @@ var staticFS embed.FS
 var apiDocContent []byte
 
 func main() {
+	// Structured JSON logging to stdout
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
+
 	cfg := config.Load()
 
 	if cfg.SecretKey == "change-me-in-production-use-random-32-chars" {
-		log.Println("WARNING: SECRET_KEY is set to its default value. Set a strong random secret in production.")
+		slog.Warn("SECRET_KEY is set to its default value — set a strong random secret in production")
 	}
 
 	// Ensure data directory exists
 	if err := os.MkdirAll(cfg.DataDir, 0755); err != nil {
-		log.Fatalf("Failed to create data directory: %v", err)
+		slog.Error("failed to create data directory", "error", err)
+		os.Exit(1)
 	}
 
 	// Open database
 	database, err := db.Open(cfg.DataDir)
 	if err != nil {
-		log.Fatalf("Database error: %v", err)
+		slog.Error("database error", "error", err)
+		os.Exit(1)
 	}
 	defer database.Close() //nolint:errcheck
 
 	// Seed defaults
 	if err := database.SeedDefaults(cfg.AdminUser, cfg.AdminPassword); err != nil {
-		log.Fatalf("Seed error: %v", err)
+		slog.Error("seed error", "error", err)
+		os.Exit(1)
 	}
 
 	// Clean expired sessions and reset tokens periodically
@@ -256,8 +263,7 @@ func main() {
 	// Initialize SAML if configured
 	if cfg.SAMLEnabled {
 		if err := authHandler.InitSAML(); err != nil {
-			log.Printf("WARNING: SAML initialization failed: %v", err)
-			log.Printf("SAML SSO will be disabled. Fix configuration and restart.")
+			slog.Warn("SAML initialization failed — SSO disabled", "error", err)
 			cfg.SAMLEnabled = false
 		}
 	}
@@ -528,22 +534,22 @@ func main() {
 
 	// Start server
 	addr := ":" + cfg.Port
-	log.Printf("🚀 %s démarré sur http://localhost%s", cfg.AppName, addr)
-	log.Printf("   Admin: %s", cfg.AdminUser)
+	slog.Info("server started", "app", cfg.AppName, "addr", "http://localhost"+addr, "admin", cfg.AdminUser)
 	if cfg.SAMLEnabled {
-		log.Printf("   SAML SSO: activé (Entity ID: %s)", cfg.SAMLEntityID)
+		slog.Info("SAML SSO enabled", "entity_id", cfg.SAMLEntityID)
 	}
 	if cfg.MetricsToken != "" {
-		log.Printf("   Métriques Prometheus: http://localhost%s/metrics", addr)
+		slog.Info("Prometheus metrics enabled", "path", "http://localhost"+addr+"/metrics")
 	}
 	srv := &http.Server{
 		Addr:         addr,
-		Handler:      middleware.SecurityHeaders(metrics.Instrument(mux)),
+		Handler:      middleware.SecurityHeaders(metrics.Instrument(middleware.AccessLog(mux))),
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
 	if err := srv.ListenAndServe(); err != nil {
-		log.Fatal(err)
+		slog.Error("server stopped", "error", err)
+		os.Exit(1)
 	}
 }

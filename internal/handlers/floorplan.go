@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -206,6 +207,10 @@ func (h *FloorplanHandler) CreateFloorplan(w http.ResponseWriter, r *http.Reques
 		jsonError(w, "Erreur", http.StatusInternalServerError)
 		return
 	}
+	actor := middleware.GetUser(r)
+	if actor != nil {
+		slog.Info("admin.floorplan.create", "actor", actor.Email, "floorplan_id", id, "name", req.Name)
+	}
 	jsonOK(w, map[string]interface{}{"id": id, "name": req.Name})
 }
 
@@ -255,6 +260,10 @@ func (h *FloorplanHandler) UpdateFloorplan(w http.ResponseWriter, r *http.Reques
 		jsonError(w, "Erreur", http.StatusInternalServerError)
 		return
 	}
+	actor := middleware.GetUser(r)
+	if actor != nil {
+		slog.Info("admin.floorplan.update", "actor", actor.Email, "floorplan_id", id, "name", req.Name)
+	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 
@@ -267,6 +276,10 @@ func (h *FloorplanHandler) DeleteFloorplan(w http.ResponseWriter, r *http.Reques
 		_ = os.Remove(filepath.Join(h.DataDir, fp.ImagePath))
 	}
 	h.DB.DeleteFloorplan(id) //nolint:errcheck
+	actor := middleware.GetUser(r)
+	if actor != nil {
+		slog.Info("admin.floorplan.delete", "actor", actor.Email, "floorplan_id", id)
+	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 
@@ -332,6 +345,10 @@ func (h *FloorplanHandler) UploadFloorplanImage(w http.ResponseWriter, r *http.R
 	}
 
 	h.DB.SetFloorplanImage(id, filename) //nolint:errcheck
+	actor := middleware.GetUser(r)
+	if actor != nil {
+		slog.Info("admin.floorplan.image_upload", "actor", actor.Email, "floorplan_id", id, "file", filename)
+	}
 	jsonOK(w, map[string]string{"status": "ok", "image_path": filename})
 }
 
@@ -356,6 +373,10 @@ func (h *FloorplanHandler) CreateSeat(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "Erreur", http.StatusInternalServerError)
 		return
 	}
+	actor := middleware.GetUser(r)
+	if actor != nil {
+		slog.Info("admin.seat.create", "actor", actor.Email, "floorplan_id", fpID, "label", req.Label, "seat_id", seatID)
+	}
 	jsonOK(w, map[string]interface{}{"id": seatID, "label": req.Label, "x_pct": req.XPct, "y_pct": req.YPct})
 }
 
@@ -376,6 +397,10 @@ func (h *FloorplanHandler) UpdateSeat(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "Erreur", http.StatusInternalServerError)
 		return
 	}
+	actor := middleware.GetUser(r)
+	if actor != nil {
+		slog.Info("admin.seat.update", "actor", actor.Email, "seat_id", id, "label", req.Label)
+	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 
@@ -383,6 +408,10 @@ func (h *FloorplanHandler) UpdateSeat(w http.ResponseWriter, r *http.Request) {
 func (h *FloorplanHandler) DeleteSeat(w http.ResponseWriter, r *http.Request) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	h.DB.DeleteSeat(id) //nolint:errcheck
+	actor := middleware.GetUser(r)
+	if actor != nil {
+		slog.Info("admin.seat.delete", "actor", actor.Email, "seat_id", id)
+	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 

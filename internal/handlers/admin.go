@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -90,6 +91,7 @@ func (h *AdminHandler) CreateTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "team", id, "create", req.Name)
+		slog.Info("admin.team.create", "actor", currentUser.Email, "team", req.Name, "team_id", id)
 	}
 	jsonOK(w, map[string]interface{}{"id": id, "status": "ok"})
 }
@@ -106,6 +108,7 @@ func (h *AdminHandler) DeleteTeam(w http.ResponseWriter, r *http.Request) {
 	h.DB.DeleteTeam(id) //nolint:errcheck
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "team", id, "delete", teamName)
+		slog.Info("admin.team.delete", "actor", currentUser.Email, "team", teamName, "team_id", id)
 	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
@@ -125,6 +128,7 @@ func (h *AdminHandler) UpdateTeam(w http.ResponseWriter, r *http.Request) {
 	h.DB.UpdateTeam(id, req.Name)        //nolint:errcheck
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "team", id, "update", req.Name)
+		slog.Info("admin.team.update", "actor", currentUser.Email, "team", req.Name, "team_id", id)
 	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
@@ -150,6 +154,7 @@ func (h *AdminHandler) AddTeamMember(w http.ResponseWriter, r *http.Request) {
 	h.DB.AddTeamMember(teamID, req.UserID) //nolint:errcheck
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "team", teamID, "add_member", memberName)
+		slog.Info("admin.team.add_member", "actor", currentUser.Email, "team_id", teamID, "member", memberName)
 	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
@@ -172,6 +177,7 @@ func (h *AdminHandler) RemoveTeamMember(w http.ResponseWriter, r *http.Request) 
 	h.DB.RemoveTeamMember(teamID, userID) //nolint:errcheck
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "team", teamID, "remove_member", memberName)
+		slog.Info("admin.team.remove_member", "actor", currentUser.Email, "team_id", teamID, "member", memberName)
 	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
@@ -222,6 +228,7 @@ func (h *AdminHandler) CreateStatus(w http.ResponseWriter, r *http.Request) {
 	currentUser := middleware.GetUser(r)
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "status", id, "create", req.Name)
+		slog.Info("admin.status.create", "actor", currentUser.Email, "status", req.Name, "status_id", id)
 	}
 	jsonOK(w, map[string]interface{}{"id": id, "status": "ok"})
 }
@@ -241,6 +248,7 @@ func (h *AdminHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	currentUser := middleware.GetUser(r)
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "status", id, "update", req.Name)
+		slog.Info("admin.status.update", "actor", currentUser.Email, "status", req.Name, "status_id", id)
 	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
@@ -253,6 +261,7 @@ func (h *AdminHandler) DeleteStatus(w http.ResponseWriter, r *http.Request) {
 	currentUser := middleware.GetUser(r)
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "status", id, "delete", statusName)
+		slog.Info("admin.status.delete", "actor", currentUser.Email, "status", statusName, "status_id", id)
 	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
@@ -280,6 +289,7 @@ func (h *AdminHandler) UpdateUserRoles(w http.ResponseWriter, r *http.Request) {
 	currentUser := middleware.GetUser(r)
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "user", id, "update_roles", roles)
+		slog.Info("admin.user.roles", "actor", currentUser.Email, "target_id", id, "roles", roles)
 	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }

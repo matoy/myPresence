@@ -8,7 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/xml"
 	"fmt"
-	"log"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"net/url"
@@ -103,7 +103,7 @@ func (h *AuthHandler) InitSAML() error {
 		IDPMetadata: idpMetadata,
 	}
 
-	log.Printf("SAML SSO enabled (Entity ID: %s)", h.Config.SAMLEntityID)
+	slog.Info("saml.enabled", "entity_id", h.Config.SAMLEntityID)
 	return nil
 }
 
@@ -127,6 +127,7 @@ func (h *AuthHandler) LocalLogin(w http.ResponseWriter, r *http.Request) {
 	// Rate limit: block IPs with too many recent failures
 	if h.RateLimiter != nil && !h.RateLimiter.Allow(r) {
 		metrics.AuthLoginsTotal.WithLabelValues("local", "failure").Inc()
+		slog.Warn("auth.login", "result", "blocked", "method", "local", "ip", clientIP(r))
 		http.Redirect(w, r, "/login?error=Too+many+attempts%2C+please+wait", http.StatusSeeOther)
 		return
 	}
@@ -139,6 +140,7 @@ func (h *AuthHandler) LocalLogin(w http.ResponseWriter, r *http.Request) {
 			h.RateLimiter.RecordFailure(r)
 		}
 		metrics.AuthLoginsTotal.WithLabelValues("local", "failure").Inc()
+		slog.Warn("auth.login", "result", "failure", "user", username, "method", "local", "ip", clientIP(r))
 	}
 
 	var userID int64
@@ -184,6 +186,7 @@ func (h *AuthHandler) LocalLogin(w http.ResponseWriter, r *http.Request) {
 		h.RateLimiter.Reset(r)
 	}
 	metrics.AuthLoginsTotal.WithLabelValues("local", "success").Inc()
+	slog.Info("auth.login", "result", "success", "user", username, "method", "local", "ip", clientIP(r))
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session",
@@ -199,6 +202,9 @@ func (h *AuthHandler) LocalLogin(w http.ResponseWriter, r *http.Request) {
 
 // Logout clears the session.
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	if u := middleware.GetUser(r); u != nil {
+		slog.Info("auth.logout", "user", u.Email)
+	}
 	cookie, err := r.Cookie("session")
 	if err == nil {
 		h.DB.DeleteSession(cookie.Value) //nolint:errcheck
@@ -231,14 +237,14 @@ func (h *AuthHandler) SAMLLogin(w http.ResponseWriter, r *http.Request) {
 		saml.HTTPPostBinding,
 	)
 	if err != nil {
-		log.Printf("SAML AuthnRequest error: %v", err)
+		slog.Error("auth.saml.authn_request", "error", err)
 		http.Redirect(w, r, "/login?error=Erreur+SSO", http.StatusSeeOther)
 		return
 	}
 
 	redirectURL, err := authReq.Redirect("", h.SP)
 	if err != nil {
-		log.Printf("SAML redirect error: %v", err)
+		slog.Error("auth.saml.redirect", "error", err)
 		http.Redirect(w, r, "/login?error=Erreur+SSO", http.StatusSeeOther)
 		return
 	}
@@ -272,7 +278,7 @@ func (h *AuthHandler) SAMLACS(w http.ResponseWriter, r *http.Request) {
 	})
 	assertion, err := h.SP.ParseResponse(r, pendingIDs)
 	if err != nil {
-		log.Printf("SAML Response error: %v", err)
+		slog.Warn("auth.saml.response", "error", err, "ip", clientIP(r))
 		http.Redirect(w, r, "/login?error=Authentification+SSO+échouée", http.StatusSeeOther)
 		return
 	}
@@ -306,7 +312,7 @@ func (h *AuthHandler) SAMLACS(w http.ResponseWriter, r *http.Request) {
 	// Auto-provision or update user
 	user, err := h.DB.UpsertUser(email, displayName)
 	if err != nil {
-		log.Printf("User provisioning error: %v", err)
+		slog.Error("auth.saml.provision", "error", err, "email", email)
 		http.Redirect(w, r, "/login?error=Erreur+provisionnement", http.StatusSeeOther)
 		return
 	}
@@ -337,7 +343,7 @@ func (h *AuthHandler) SAMLACS(w http.ResponseWriter, r *http.Request) {
 			roles = []string{models.RoleBasic}
 		}
 		if err := h.DB.UpdateUserRoles(user.ID, strings.Join(roles, ",")); err != nil {
-			log.Printf("SAML role sync error: %v", err)
+			slog.Warn("auth.saml.role_sync", "error", err, "email", email)
 		}
 	}
 
@@ -349,6 +355,7 @@ func (h *AuthHandler) SAMLACS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	metrics.AuthLoginsTotal.WithLabelValues("saml", "success").Inc()
+	slog.Info("auth.login", "result", "success", "user", email, "method", "saml", "ip", clientIP(r))
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session",
 		Value:    token,
@@ -412,4 +419,13 @@ func generateSelfSignedCert() (tls.Certificate, error) {
 		Certificate: [][]byte{certDER},
 		PrivateKey:  key,
 	}, nil
+}
+
+// clientIP returns the best-effort client IP address from a request,
+// honouring X-Forwarded-For when present (first entry only).
+func clientIP(r *http.Request) string {
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		return strings.SplitN(fwd, ",", 2)[0]
+	}
+	return r.RemoteAddr
 }

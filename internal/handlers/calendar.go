@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -138,6 +139,7 @@ func (h *CalendarHandler) SetPresences(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.DB.LogPresenceAction(user.ID, req.UserID, "set", req.Dates, req.StatusID, req.Half) //nolint:errcheck
+	slog.Info("presence.set", "actor", user.Email, "target_id", req.UserID, "dates", len(req.Dates), "status_id", req.StatusID, "half", req.Half)
 
 	half := req.Half
 	if half == "" {
@@ -174,6 +176,7 @@ func (h *CalendarHandler) ClearPresences(w http.ResponseWriter, r *http.Request)
 	}
 
 	h.DB.LogPresenceAction(user.ID, req.UserID, "clear", req.Dates, 0, req.Half) //nolint:errcheck
+	slog.Info("presence.clear", "actor", user.Email, "target_id", req.UserID, "dates", len(req.Dates), "half", req.Half)
 
 	clearHalf := req.Half
 	if clearHalf == "" {

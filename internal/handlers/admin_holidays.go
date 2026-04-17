@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -52,6 +53,7 @@ func (h *HolidaysHandler) CreateHoliday(w http.ResponseWriter, r *http.Request) 
 	currentUser := middleware.GetUser(r)
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "holiday", id, "create", req.Date+" "+req.Name)
+		slog.Info("admin.holiday.create", "actor", currentUser.Email, "date", req.Date, "name", req.Name, "holiday_id", id)
 	}
 	jsonOK(w, map[string]interface{}{"id": id, "status": "ok"})
 }
@@ -88,6 +90,7 @@ func (h *HolidaysHandler) UpdateHoliday(w http.ResponseWriter, r *http.Request) 
 	currentUser := middleware.GetUser(r)
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "holiday", id, "update", req.Date+" "+req.Name)
+		slog.Info("admin.holiday.update", "actor", currentUser.Email, "date", req.Date, "name", req.Name, "holiday_id", id)
 	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
@@ -111,6 +114,7 @@ func (h *HolidaysHandler) DeleteHoliday(w http.ResponseWriter, r *http.Request) 
 	currentUser := middleware.GetUser(r)
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "holiday", id, "delete", holidayName)
+		slog.Info("admin.holiday.delete", "actor", currentUser.Email, "name", holidayName, "holiday_id", id)
 	}
 	jsonOK(w, map[string]string{"status": "ok"})
 }
