@@ -254,7 +254,7 @@ func main() {
 	usersAdminHandler := &handlers.UsersAdminHandler{DB: database, Render: renderPage}
 	floorplanHandler := &handlers.FloorplanHandler{DB: database, DataDir: cfg.DataDir, Render: renderPage}
 	settingsHandler := &handlers.SettingsHandler{DB: database, Render: renderPage}
-	resetPasswordHandler := &handlers.ResetPasswordHandler{DB: database, Config: cfg, Render: renderPage}
+	resetPasswordHandler := &handlers.ResetPasswordHandler{DB: database, Config: cfg, Render: renderPage, RateLimiter: middleware.NewLoginRateLimiter()}
 	var patHandler *handlers.PATHandler
 	if !cfg.DisableAPI {
 		patHandler = &handlers.PATHandler{DB: database, Render: renderPage}

@@ -18,6 +18,10 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// bcryptCost is the work factor used for all password hashing.
+// OWASP Password Storage Cheat Sheet recommends ≥12 on modern hardware.
+const bcryptCost = 12
+
 // DB holds separate SQLite connections for each domain.
 type DB struct {
 	dataDir   string
@@ -456,7 +460,7 @@ func copyLegacyRows(src, dst *sql.DB, srcQuery, dstInsert string) error {
 
 // SeedDefaults creates the admin user and default statuses if they don't exist.
 func (d *DB) SeedDefaults(adminUser, adminPass string) error {
-	hash, err := bcrypt.GenerateFromPassword([]byte(adminPass), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(adminPass), bcryptCost)
 	if err != nil {
 		return fmt.Errorf("hash admin password: %w", err)
 	}
@@ -873,7 +877,7 @@ func (d *DB) UpdateUserRoles(id int64, roles string) error {
 }
 
 func (d *DB) CreateLocalUser(email, name, password string) (int64, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
 	if err != nil {
 		return 0, fmt.Errorf("hash password: %w", err)
 	}
@@ -900,7 +904,7 @@ func (d *DB) CheckPassword(userID int64, storedHash, plainPassword string) bool 
 	}
 	// Legacy plain-text comparison — rehash automatically on successful match
 	if storedHash == plainPassword {
-		if hash, err := bcrypt.GenerateFromPassword([]byte(plainPassword), bcrypt.DefaultCost); err == nil {
+		if hash, err := bcrypt.GenerateFromPassword([]byte(plainPassword), bcryptCost); err == nil {
 			d.core.Exec("UPDATE users SET password_hash = ? WHERE id = ?", string(hash), userID) //nolint:errcheck
 		}
 		return true
@@ -914,7 +918,7 @@ func (d *DB) UpdateLocalUser(id int64, email, name string) error {
 }
 
 func (d *DB) SetUserPassword(id int64, password string) error {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
 	if err != nil {
 		return fmt.Errorf("hash password: %w", err)
 	}

@@ -9,13 +9,15 @@ import (
 	"presence-app/internal/config"
 	"presence-app/internal/db"
 	"presence-app/internal/mailer"
+	"presence-app/internal/middleware"
 )
 
 // ResetPasswordHandler handles the forgot-password / reset-password flow.
 type ResetPasswordHandler struct {
-	DB     *db.DB
-	Config *config.Config
-	Render func(w http.ResponseWriter, r *http.Request, page string, data interface{})
+	DB          *db.DB
+	Config      *config.Config
+	Render      func(w http.ResponseWriter, r *http.Request, page string, data interface{})
+	RateLimiter *middleware.LoginRateLimiter
 }
 
 // ForgotPasswordPage renders the "forgot password" form.
@@ -27,6 +29,10 @@ func (h *ResetPasswordHandler) ForgotPasswordPage(w http.ResponseWriter, r *http
 
 // ForgotPasswordPost processes the email submission and sends a reset link.
 func (h *ResetPasswordHandler) ForgotPasswordPost(w http.ResponseWriter, r *http.Request) {
+	if h.RateLimiter != nil && !h.RateLimiter.Allow(r) {
+		http.Error(w, "Too many requests, please wait", http.StatusTooManyRequests)
+		return
+	}
 	email := strings.TrimSpace(r.FormValue("email"))
 
 	// Always show the same neutral message to prevent user enumeration.
@@ -83,6 +89,10 @@ func (h *ResetPasswordHandler) ResetPasswordPage(w http.ResponseWriter, r *http.
 
 // ResetPasswordPost sets the new password if the token is valid.
 func (h *ResetPasswordHandler) ResetPasswordPost(w http.ResponseWriter, r *http.Request) {
+	if h.RateLimiter != nil && !h.RateLimiter.Allow(r) {
+		http.Error(w, "Too many requests, please wait", http.StatusTooManyRequests)
+		return
+	}
 	token := strings.TrimSpace(r.FormValue("token"))
 	password := r.FormValue("password")
 	confirm := r.FormValue("confirm")
