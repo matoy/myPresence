@@ -11,14 +11,11 @@ RUN apk add --no-cache git ca-certificates
 WORKDIR /build
 
 # Copy go.mod first for dependency caching
-COPY go.mod ./
+COPY go.mod go.sum ./
 RUN go mod download 2>/dev/null || true
 
 # Copy all source
 COPY . .
-
-# Resolve dependencies (generates go.sum if needed)
-RUN go mod tidy
 
 # Build static binary
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app .
