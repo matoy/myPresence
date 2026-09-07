@@ -481,6 +481,11 @@ var en = map[string]string{
 	"activity.holiday_s":          "public holiday",
 	"activity.holiday_p":          "public holidays",
 	"activity.ytd_billable":       "Worked YTD",
+	"activity.date_from":           "From",
+	"activity.date_to":             "To",
+	"activity.apply":               "Apply",
+	"activity.reset":               "Current month",
+	"activity.working_days_period": "Working days in period",
 
 	// Logs
 	"logs.title":                "📋 Logs",
@@ -1301,6 +1306,11 @@ var fr = map[string]string{
 	"activity.holiday_s":          "j. férié",
 	"activity.holiday_p":          "j. fériés",
 	"activity.ytd_billable":       "Travaillés YTD",
+	"activity.date_from":           "Du",
+	"activity.date_to":             "Au",
+	"activity.apply":               "Appliquer",
+	"activity.reset":               "Mois en cours",
+	"activity.working_days_period": "Jours ouvrés sur la période",
 
 	"logs.title":                "📋 Journaux",
 	"logs.period":               "Période :",
@@ -2117,6 +2127,11 @@ var de = map[string]string{
 	"activity.holiday_s":          "Feiertag",
 	"activity.holiday_p":          "Feiertage",
 	"activity.ytd_billable":       "Gearbeitet YTD",
+	"activity.date_from":           "Von",
+	"activity.date_to":             "Bis",
+	"activity.apply":               "Anwenden",
+	"activity.reset":               "Aktueller Monat",
+	"activity.working_days_period": "Arbeitstage im Zeitraum",
 
 	"logs.title":                "📋 Protokolle",
 	"logs.period":               "Zeitraum:",
@@ -2928,6 +2943,11 @@ var es = map[string]string{
 	"activity.holiday_s":          "festivo",
 	"activity.holiday_p":          "festivos",
 	"activity.ytd_billable":       "Trabajados YTD",
+	"activity.date_from":           "Desde",
+	"activity.date_to":             "Hasta",
+	"activity.apply":               "Aplicar",
+	"activity.reset":               "Mes actual",
+	"activity.working_days_period": "Días laborables en el período",
 
 	"logs.title":                "📋 Registros",
 	"logs.period":               "Período:",
@@ -3746,6 +3766,11 @@ var it = map[string]string{
 	"activity.holiday_s":          "festività",
 	"activity.holiday_p":          "festività",
 	"activity.ytd_billable":       "Lavorati YTD",
+	"activity.date_from":           "Dal",
+	"activity.date_to":             "Al",
+	"activity.apply":               "Applica",
+	"activity.reset":               "Mese corrente",
+	"activity.working_days_period": "Giorni lavorativi nel periodo",
 
 	// Logs
 	"logs.title":                "📋 Log",

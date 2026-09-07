@@ -82,9 +82,73 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 
 	year, month, viewMode, teamID, domainID := normalizeActivityParams(r, time.Now(), teams, myTeamIDs, myDomains, preferredTeamID)
 
-	startDate := fmt.Sprintf("%04d-%02d-01", year, month)
-	lastDay := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC)
-	endDate := lastDay.Format("2006-01-02")
+	q := r.URL.Query()
+	dateFromParam := q.Get("date_from")
+	dateToParam := q.Get("date_to")
+
+	var isRange bool
+	var monthKeys []string
+	var filterDateFrom, filterDateTo string
+
+	if dateFromParam != "" || dateToParam != "" {
+		df := dateFromParam
+		dt := dateToParam
+		if df == "" {
+			df = dt
+		}
+		if dt == "" {
+			dt = df
+		}
+		if len(df) >= 7 && len(dt) >= 7 {
+			df = df[:7]
+			dt = dt[:7]
+			if df > dt {
+				df, dt = dt, df
+			}
+			monthKeys = buildMonthKeysFromRange(df, dt)
+			if len(monthKeys) > 0 {
+				isRange = true
+				filterDateFrom = df
+				filterDateTo = dt
+			}
+		}
+	}
+
+	var startDate, endDate string
+	var periodStartMonth, periodStartYear, periodEndMonth, periodEndYear int
+	var prevDateFrom, prevDateTo, nextDateFrom, nextDateTo string
+	var prevTime, nextTime time.Time
+
+	if isRange {
+		fmt.Sscanf(monthKeys[0], "%04d-%02d", &periodStartYear, &periodStartMonth)
+		fmt.Sscanf(monthKeys[len(monthKeys)-1], "%04d-%02d", &periodEndYear, &periodEndMonth)
+		startDate = fmt.Sprintf("%04d-%02d-01", periodStartYear, periodStartMonth)
+		lastDay := time.Date(periodEndYear, time.Month(periodEndMonth)+1, 0, 0, 0, 0, 0, time.UTC)
+		endDate = lastDay.Format("2006-01-02")
+		year = periodStartYear
+		month = periodStartMonth
+
+		span := len(monthKeys)
+		rangeStart := time.Date(periodStartYear, time.Month(periodStartMonth), 1, 0, 0, 0, 0, time.UTC)
+		rangeEnd := time.Date(periodEndYear, time.Month(periodEndMonth), 1, 0, 0, 0, 0, time.UTC)
+		prevDateFrom = rangeStart.AddDate(0, -span, 0).Format("2006-01")
+		prevDateTo = rangeEnd.AddDate(0, -span, 0).Format("2006-01")
+		nextDateFrom = rangeStart.AddDate(0, span, 0).Format("2006-01")
+		nextDateTo = rangeEnd.AddDate(0, span, 0).Format("2006-01")
+		prevTime = rangeStart.AddDate(0, -span, 0)
+		nextTime = rangeStart.AddDate(0, span, 0)
+	} else {
+		monthKeys = []string{fmt.Sprintf("%04d-%02d", year, month)}
+		filterDateFrom = monthKeys[0]
+		filterDateTo = monthKeys[0]
+		periodStartYear, periodStartMonth = year, month
+		periodEndYear, periodEndMonth = year, month
+		startDate = fmt.Sprintf("%04d-%02d-01", year, month)
+		lastDay := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC)
+		endDate = lastDay.Format("2006-01-02")
+		prevTime = time.Date(year, time.Month(month)-1, 1, 0, 0, 0, 0, time.UTC)
+		nextTime = time.Date(year, time.Month(month)+1, 1, 0, 0, 0, 0, time.UTC)
+	}
 
 	var stats []models.UserStats
 	var domainTeams []models.Team
@@ -132,7 +196,12 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 	for _, hol := range holidayMap {
 		holidays = append(holidays, hol)
 	}
-	days := getDaysInMonth(year, month)
+	var days []models.DayInfo
+	if isRange {
+		days = getDaysInRange(startDate, endDate)
+	} else {
+		days = getDaysInMonth(year, month)
+	}
 	markHolidaysOnDays(days, holidays)
 	var members []models.User
 	var presenceMap map[int64]map[string]map[string]int64
@@ -142,11 +211,11 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 		presenceMap = map[int64]map[string]map[string]int64{}
 	}
 
-	// Count working days in the month (Mon–Fri) and holidays on those days.
+	// Count working days in the period (Mon–Fri) and holidays on those days.
 	var workingDays, holidayCount int
 	if teamID > 0 {
 		thm, _ := h.DB.GetTeamHolidayMap(teamID, startDate, endDate)
-		workingDays, holidayCount = computeWorkingDaysFromMap(year, month, thm)
+		workingDays, holidayCount = computeWorkingDaysFromRange(startDate, endDate, thm)
 	} else {
 		holMap := make(map[string]models.Holiday)
 		for _, hol := range holidays {
@@ -154,7 +223,7 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 				holMap[hol.Date] = hol
 			}
 		}
-		workingDays, holidayCount = computeWorkingDaysFromMap(year, month, holMap)
+		workingDays, holidayCount = computeWorkingDaysFromRange(startDate, endDate, holMap)
 	}
 	workingDaysExcluded := workingDays - holidayCount
 	totalOnSite := 0.0
@@ -167,9 +236,9 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 	showProjectActivity := !h.DisableProjects && domainID == 0
 	if showProjectActivity {
 		if teamHasManualTimesheets(allTeams, teamID) {
-			projectActivityByUser, totalProjectDeclared = h.computeManualProjectActivity(stats, year, month)
+			projectActivityByUser, totalProjectDeclared = h.computeManualProjectActivityForMonths(stats, monthKeys)
 		} else {
-			projectActivityByUser, totalProjectDeclared = h.computeProjectActivity(stats, year, month)
+			projectActivityByUser, totalProjectDeclared = h.computeProjectActivityForMonths(stats, monthKeys)
 		}
 	}
 
@@ -177,7 +246,7 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 	totalWorkingDays := 0.0
 	for _, s := range stats {
 		uHolMap, _ := h.DB.GetUserHolidayMap(s.User.ID, startDate, endDate)
-		uWorkingDays, uHolCount := computeWorkingDaysFromMap(year, month, uHolMap)
+		uWorkingDays, uHolCount := computeWorkingDaysFromRange(startDate, endDate, uHolMap)
 		totalWorkingDays += float64(uWorkingDays - uHolCount)
 	}
 	totalNotSet := totalWorkingDays - totalSetDays
@@ -188,10 +257,10 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 	// Per-day billable / on-site counts for daily breakdown footer
 	dayBillable, dayOnSite := computeDayBillableOnSite(presenceMap, statuses)
 
-	// YTD billable days per user (Jan 1 → end of current month)
+	// YTD billable days per user (Jan 1 of endYear → end of current period)
 	ytdBillableByUser := make(map[int64]float64)
 	totalYTDBillable := 0.0
-	ytdStart := fmt.Sprintf("%04d-01-01", year)
+	ytdStart := fmt.Sprintf("%04d-01-01", periodEndYear)
 	if domainID > 0 {
 		ytdStats := h.computeDomainStats(domainTeams, ytdStart, endDate)
 		for _, s := range ytdStats {
@@ -213,22 +282,37 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 	var execUserCount int
 	if showExecSummary && len(allTeams) > 0 {
 		execStatusTotals, execTotalBillable, execTotalOnSite, execTotalNotSet, execTotalWorkingDays, execProjectActivityPct, execUserCount =
-			h.computeExecSummary(allTeams, startDate, endDate, year, month)
+			h.computeExecSummary(allTeams, startDate, endDate, monthKeys)
 	}
 
-	prevTime := time.Date(year, time.Month(month)-1, 1, 0, 0, 0, 0, time.UTC)
-	nextTime := time.Date(year, time.Month(month)+1, 1, 0, 0, 0, 0, time.UTC)
-
-	// Certification status per user for the displayed month, for the "signed
-	// contract" badge next to each name in the Team Summary table.
+	// Certification status per user for the displayed period:
+	// For multi-month range, a user must be certified in all months.
 	statUserIDs := make([]int64, len(stats))
 	for i, s := range stats {
 		statUserIDs[i] = s.User.ID
 	}
-	certifiedUsers, _ := h.DB.GetCertifiedUserIDs(statUserIDs, year, month)
-	// Same for the project time declaration certification (percentage-based
-	// or "Timesheets managed manually"), shown as a separate red seal.
-	projectCertifiedUsers, _ := h.DB.GetCertifiedProjectUserIDs(statUserIDs, year, month)
+	certifiedUsers := make(map[int64]bool)
+	projectCertifiedUsers := make(map[int64]bool)
+	if len(statUserIDs) > 0 {
+		for _, uid := range statUserIDs {
+			certifiedUsers[uid] = true
+			projectCertifiedUsers[uid] = true
+		}
+		for _, mk := range monthKeys {
+			var y, m int
+			fmt.Sscanf(mk, "%04d-%02d", &y, &m)
+			cMap, _ := h.DB.GetCertifiedUserIDs(statUserIDs, y, m)
+			pcMap, _ := h.DB.GetCertifiedProjectUserIDs(statUserIDs, y, m)
+			for _, uid := range statUserIDs {
+				if !cMap[uid] {
+					certifiedUsers[uid] = false
+				}
+				if !pcMap[uid] {
+					projectCertifiedUsers[uid] = false
+				}
+			}
+		}
+	}
 
 	// Domain groups for the team-selector dropdown: only built for users who
 	// manage at least one domain, so the dropdown can list domains with their
@@ -252,6 +336,17 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 		"ShowDailyBreakdown":     showDailyBreakdown,
 		"Year":                   year,
 		"Month":                  month,
+		"IsRange":                isRange,
+		"FilterDateFrom":         filterDateFrom,
+		"FilterDateTo":           filterDateTo,
+		"PrevDateFrom":           prevDateFrom,
+		"PrevDateTo":             prevDateTo,
+		"NextDateFrom":           nextDateFrom,
+		"NextDateTo":             nextDateTo,
+		"PeriodStartMonth":       periodStartMonth,
+		"PeriodStartYear":        periodStartYear,
+		"PeriodEndMonth":         periodEndMonth,
+		"PeriodEndYear":          periodEndYear,
 		"ViewMode":               viewMode,
 		"TotalBillable":          totalBillable,
 		"TotalNotSet":            totalNotSet,
@@ -282,7 +377,7 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 		"TotalYTDBillable":       totalYTDBillable,
 		"Certified":              certifiedUsers,
 		"ProjectCertified":       projectCertifiedUsers,
-		"CanDecertify":           currentUser != nil && (currentUser.HasAnyRole(models.RoleGlobal, models.RoleActivityViewer) || len(myTeamIDs) > 0),
+		"CanDecertify":           !isRange && currentUser != nil && (currentUser.HasAnyRole(models.RoleGlobal, models.RoleActivityViewer) || len(myTeamIDs) > 0),
 	})
 }
 
@@ -345,8 +440,46 @@ func (h *ActivityHandler) ActivityAPI(w http.ResponseWriter, r *http.Request) {
 	teamID, _ := strconv.ParseInt(r.URL.Query().Get("team_id"), 10, 64)
 	year, _ := strconv.Atoi(r.URL.Query().Get("year"))
 	month, _ := strconv.Atoi(r.URL.Query().Get("month"))
+	dateFromParam := r.URL.Query().Get("date_from")
+	dateToParam := r.URL.Query().Get("date_to")
 
-	if teamID == 0 || year == 0 || month == 0 {
+	var startDate, endDate string
+	if dateFromParam != "" || dateToParam != "" {
+		df := dateFromParam
+		dt := dateToParam
+		if df == "" {
+			df = dt
+		}
+		if dt == "" {
+			dt = df
+		}
+		if len(df) >= 7 && len(dt) >= 7 {
+			df = df[:7]
+			dt = dt[:7]
+			if df > dt {
+				df, dt = dt, df
+			}
+			mKeys := buildMonthKeysFromRange(df, dt)
+			if len(mKeys) > 0 {
+				var sy, sm, ey, em int
+				fmt.Sscanf(mKeys[0], "%04d-%02d", &sy, &sm)
+				fmt.Sscanf(mKeys[len(mKeys)-1], "%04d-%02d", &ey, &em)
+				startDate = fmt.Sprintf("%04d-%02d-01", sy, sm)
+				lastDay := time.Date(ey, time.Month(em)+1, 0, 0, 0, 0, 0, time.UTC)
+				endDate = lastDay.Format("2006-01-02")
+			}
+		}
+	}
+
+	if startDate == "" {
+		if teamID == 0 || year == 0 || month == 0 {
+			jsonError(w, "Paramètres manquants", http.StatusBadRequest)
+			return
+		}
+		startDate = fmt.Sprintf("%04d-%02d-01", year, month)
+		lastDay := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC)
+		endDate = lastDay.Format("2006-01-02")
+	} else if teamID == 0 {
 		jsonError(w, "Paramètres manquants", http.StatusBadRequest)
 		return
 	}
@@ -377,10 +510,6 @@ func (h *ActivityHandler) ActivityAPI(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
-	startDate := fmt.Sprintf("%04d-%02d-01", year, month)
-	lastDay := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC)
-	endDate := lastDay.Format("2006-01-02")
 
 	stats, err := h.DB.GetTeamStats(teamID, startDate, endDate)
 	if err != nil {
@@ -456,6 +585,52 @@ func computeWorkingDaysFromMap(year, month int, holidayMap map[string]models.Hol
 	return
 }
 
+// computeWorkingDaysFromRange counts working days (Mon–Fri) and non-imputable holidays
+// within [startDate, endDate] (inclusive).
+func computeWorkingDaysFromRange(startDate, endDate string, holidayMap map[string]models.Holiday) (workingDays, holidayCount int) {
+	start, err := time.Parse("2006-01-02", startDate)
+	if err != nil {
+		return 0, 0
+	}
+	end, err := time.Parse("2006-01-02", endDate)
+	if err != nil {
+		return 0, 0
+	}
+	for t := start; !t.After(end); t = t.AddDate(0, 0, 1) {
+		if t.Weekday() != time.Saturday && t.Weekday() != time.Sunday {
+			workingDays++
+			dateStr := t.Format("2006-01-02")
+			if hol, ok := holidayMap[dateStr]; ok && !hol.AllowImputed {
+				holidayCount++
+			}
+		}
+	}
+	return
+}
+
+// getDaysInRange returns a slice of DayInfo structs for each day between startDate
+// and endDate (inclusive, format "2006-01-02").
+func getDaysInRange(startDate, endDate string) []models.DayInfo {
+	start, err := time.Parse("2006-01-02", startDate)
+	if err != nil {
+		return nil
+	}
+	end, err := time.Parse("2006-01-02", endDate)
+	if err != nil {
+		return nil
+	}
+	var days []models.DayInfo
+	for t := start; !t.After(end); t = t.AddDate(0, 0, 1) {
+		days = append(days, models.DayInfo{
+			Day:       t.Day(),
+			Date:      t.Format("2006-01-02"),
+			DayIndex:  int(t.Weekday()),
+			IsWeekend: t.Weekday() == time.Saturday || t.Weekday() == time.Sunday,
+		})
+	}
+	return days
+}
+
 // computeDayBillableOnSite aggregates per-date billable and on-site half-day
 // weights from the presence map for the activity daily breakdown footer.
 func computeDayBillableOnSite(presenceMap map[int64]map[string]map[string]int64, statuses []models.Status) (dayBillable, dayOnSite map[string]float64) {
@@ -495,7 +670,7 @@ func computeDayBillableOnSite(presenceMap map[int64]map[string]map[string]int64,
 func (h *ActivityHandler) computeExecSummary(
 	allTeams []models.Team,
 	startDate, endDate string,
-	year, month int,
+	monthKeys []string,
 ) (statusTotals map[int64]float64, totalBillable, totalOnSite, totalNotSet, totalWorkingDays, projectActivityPct float64, userCount int) {
 	statusTotals = make(map[int64]float64)
 	seen := make(map[int64]bool)
@@ -519,9 +694,13 @@ func (h *ActivityHandler) computeExecSummary(
 				totalSetDays += count
 			}
 			if !h.DisableProjects {
-				declared, err := h.DB.GetUserTotalDeclaredForMonth(s.User.ID, year, month)
-				if err == nil {
-					totalProjectDeclared += declared
+				for _, mk := range monthKeys {
+					var y, m int
+					fmt.Sscanf(mk, "%04d-%02d", &y, &m)
+					declared, err := h.DB.GetUserTotalDeclaredForMonth(s.User.ID, y, m)
+					if err == nil {
+						totalProjectDeclared += declared
+					}
 				}
 			}
 		}
@@ -529,7 +708,7 @@ func (h *ActivityHandler) computeExecSummary(
 	totalWorkingDays = 0.0
 	for uid := range seen {
 		uHolMap, _ := h.DB.GetUserHolidayMap(uid, startDate, endDate)
-		uWorkingDays, uHolCount := computeWorkingDaysFromMap(year, month, uHolMap)
+		uWorkingDays, uHolCount := computeWorkingDaysFromRange(startDate, endDate, uHolMap)
 		totalWorkingDays += float64(uWorkingDays - uHolCount)
 	}
 	totalNotSet = totalWorkingDays - totalSetDays
@@ -545,15 +724,31 @@ func (h *ActivityHandler) computeExecSummary(
 // computeProjectActivity returns the per-user project activity percentage and
 // total declared days for the given month across all projects.
 func (h *ActivityHandler) computeProjectActivity(stats []models.UserStats, year, month int) (projectActivityByUser map[int64]float64, totalProjectDeclared float64) {
+	return h.computeProjectActivityForMonths(stats, []string{fmt.Sprintf("%04d-%02d", year, month)})
+}
+
+// computeProjectActivityForMonths returns the per-user project activity percentage and
+// total declared days summed across all specified months.
+func (h *ActivityHandler) computeProjectActivityForMonths(stats []models.UserStats, monthKeys []string) (projectActivityByUser map[int64]float64, totalProjectDeclared float64) {
 	projectActivityByUser = make(map[int64]float64)
 	for _, s := range stats {
-		declared, err := h.DB.GetUserTotalDeclaredForMonth(s.User.ID, year, month)
-		if err != nil {
+		var userDeclared float64
+		hasData := false
+		for _, mk := range monthKeys {
+			var y, m int
+			fmt.Sscanf(mk, "%04d-%02d", &y, &m)
+			declared, err := h.DB.GetUserTotalDeclaredForMonth(s.User.ID, y, m)
+			if err == nil {
+				userDeclared += declared
+				hasData = true
+			}
+		}
+		if !hasData {
 			continue
 		}
-		totalProjectDeclared += declared
+		totalProjectDeclared += userDeclared
 		if s.BillableDays > 0 {
-			projectActivityByUser[s.User.ID] = (declared / s.BillableDays) * 100.0
+			projectActivityByUser[s.User.ID] = (userDeclared / s.BillableDays) * 100.0
 		}
 	}
 	return
@@ -575,29 +770,44 @@ func teamHasManualTimesheets(teams []models.Team, teamID int64) bool {
 // billable days whose activities are fully declared (100%, or 50% for half
 // days), instead of the sum of declared project-time-entry days.
 func (h *ActivityHandler) computeManualProjectActivity(stats []models.UserStats, year, month int) (projectActivityByUser map[int64]float64, totalProjectDeclared float64) {
+	return h.computeManualProjectActivityForMonths(stats, []string{fmt.Sprintf("%04d-%02d", year, month)})
+}
+
+// computeManualProjectActivityForMonths returns the per-user manual project activity
+// percentage summed across all specified months.
+func (h *ActivityHandler) computeManualProjectActivityForMonths(stats []models.UserStats, monthKeys []string) (projectActivityByUser map[int64]float64, totalProjectDeclared float64) {
 	projectActivityByUser = make(map[int64]float64)
 	for _, s := range stats {
-		weights, err := h.DB.GetUserBillableDatesForMonth(s.User.ID, year, month)
-		if err != nil {
-			continue
-		}
-		activities, err := h.DB.ListUserActivitiesForMonth(s.User.ID, year, month)
-		if err != nil {
-			continue
-		}
-		sumByDate := make(map[string]float64)
-		for _, a := range activities {
-			sumByDate[a.Date] += a.Percentage
-		}
-		var declared float64
-		for date, weight := range weights {
-			if isDateComplete(sumByDate[date], weight) {
-				declared += weight
+		var userDeclared float64
+		hasData := false
+		for _, mk := range monthKeys {
+			var y, m int
+			fmt.Sscanf(mk, "%04d-%02d", &y, &m)
+			weights, err := h.DB.GetUserBillableDatesForMonth(s.User.ID, y, m)
+			if err != nil {
+				continue
+			}
+			activities, err := h.DB.ListUserActivitiesForMonth(s.User.ID, y, m)
+			if err != nil {
+				continue
+			}
+			hasData = true
+			sumByDate := make(map[string]float64)
+			for _, a := range activities {
+				sumByDate[a.Date] += a.Percentage
+			}
+			for date, weight := range weights {
+				if isDateComplete(sumByDate[date], weight) {
+					userDeclared += weight
+				}
 			}
 		}
-		totalProjectDeclared += declared
+		if !hasData {
+			continue
+		}
+		totalProjectDeclared += userDeclared
 		if s.BillableDays > 0 {
-			projectActivityByUser[s.User.ID] = (declared / s.BillableDays) * 100.0
+			projectActivityByUser[s.User.ID] = (userDeclared / s.BillableDays) * 100.0
 		}
 	}
 	return
