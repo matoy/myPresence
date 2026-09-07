@@ -86,66 +86,39 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 	dateFromParam := q.Get("date_from")
 	dateToParam := q.Get("date_to")
 
-	var isRange bool
-	var monthKeys []string
+	startDate, endDate, monthKeys, isRange := parseActivityDateRange(dateFromParam, dateToParam)
+
 	var filterDateFrom, filterDateTo string
-
-	if dateFromParam != "" || dateToParam != "" {
-		df := dateFromParam
-		dt := dateToParam
-		if df == "" {
-			df = dt
-		}
-		if dt == "" {
-			dt = df
-		}
-		if len(df) >= 7 && len(dt) >= 7 {
-			df = df[:7]
-			dt = dt[:7]
-			if df > dt {
-				df, dt = dt, df
-			}
-			monthKeys = buildMonthKeysFromRange(df, dt)
-			if len(monthKeys) > 0 {
-				isRange = true
-				filterDateFrom = df
-				filterDateTo = dt
-			}
-		}
-	}
-
-	var startDate, endDate string
-	var periodStartMonth, periodStartYear, periodEndMonth, periodEndYear int
+	var periodStartDay, periodStartMonth, periodStartYear, periodEndDay, periodEndMonth, periodEndYear int
 	var prevDateFrom, prevDateTo, nextDateFrom, nextDateTo string
 	var prevTime, nextTime time.Time
 
 	if isRange {
-		periodStartYear, periodStartMonth = parseMonthKey(monthKeys[0])
-		periodEndYear, periodEndMonth = parseMonthKey(monthKeys[len(monthKeys)-1])
-		startDate = fmt.Sprintf("%04d-%02d-01", periodStartYear, periodStartMonth)
-		lastDay := time.Date(periodEndYear, time.Month(periodEndMonth)+1, 0, 0, 0, 0, 0, time.UTC)
-		endDate = lastDay.Format("2006-01-02")
+		filterDateFrom = startDate
+		filterDateTo = endDate
+		startT, _ := time.Parse("2006-01-02", startDate)
+		endT, _ := time.Parse("2006-01-02", endDate)
+		periodStartDay, periodStartMonth, periodStartYear = startT.Day(), int(startT.Month()), startT.Year()
+		periodEndDay, periodEndMonth, periodEndYear = endT.Day(), int(endT.Month()), endT.Year()
 		year = periodStartYear
 		month = periodStartMonth
 
-		span := len(monthKeys)
-		rangeStart := time.Date(periodStartYear, time.Month(periodStartMonth), 1, 0, 0, 0, 0, time.UTC)
-		rangeEnd := time.Date(periodEndYear, time.Month(periodEndMonth), 1, 0, 0, 0, 0, time.UTC)
-		prevDateFrom = rangeStart.AddDate(0, -span, 0).Format("2006-01")
-		prevDateTo = rangeEnd.AddDate(0, -span, 0).Format("2006-01")
-		nextDateFrom = rangeStart.AddDate(0, span, 0).Format("2006-01")
-		nextDateTo = rangeEnd.AddDate(0, span, 0).Format("2006-01")
-		prevTime = rangeStart.AddDate(0, -span, 0)
-		nextTime = rangeStart.AddDate(0, span, 0)
+		spanDays := int(endT.Sub(startT).Hours()/24) + 1
+		prevDateFrom = startT.AddDate(0, 0, -spanDays).Format("2006-01-02")
+		prevDateTo = endT.AddDate(0, 0, -spanDays).Format("2006-01-02")
+		nextDateFrom = startT.AddDate(0, 0, spanDays).Format("2006-01-02")
+		nextDateTo = endT.AddDate(0, 0, spanDays).Format("2006-01-02")
+		prevTime = startT.AddDate(0, 0, -spanDays)
+		nextTime = startT.AddDate(0, 0, spanDays)
 	} else {
 		monthKeys = []string{fmt.Sprintf("%04d-%02d", year, month)}
-		filterDateFrom = monthKeys[0]
-		filterDateTo = monthKeys[0]
-		periodStartYear, periodStartMonth = year, month
-		periodEndYear, periodEndMonth = year, month
 		startDate = fmt.Sprintf("%04d-%02d-01", year, month)
 		lastDay := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC)
 		endDate = lastDay.Format("2006-01-02")
+		filterDateFrom = startDate
+		filterDateTo = endDate
+		periodStartDay, periodStartMonth, periodStartYear = 1, month, year
+		periodEndDay, periodEndMonth, periodEndYear = lastDay.Day(), month, year
 		prevTime = time.Date(year, time.Month(month)-1, 1, 0, 0, 0, 0, time.UTC)
 		nextTime = time.Date(year, time.Month(month)+1, 1, 0, 0, 0, 0, time.UTC)
 	}
@@ -236,7 +209,7 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 	showProjectActivity := !h.DisableProjects && domainID == 0
 	if showProjectActivity {
 		if teamHasManualTimesheets(allTeams, teamID) {
-			projectActivityByUser, totalProjectDeclared = h.computeManualProjectActivityForMonths(stats, monthKeys)
+			projectActivityByUser, totalProjectDeclared = h.computeManualProjectActivityForRange(stats, startDate, endDate)
 		} else {
 			projectActivityByUser, totalProjectDeclared = h.computeProjectActivityForMonths(stats, monthKeys)
 		}
@@ -342,8 +315,10 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 		"PrevDateTo":             prevDateTo,
 		"NextDateFrom":           nextDateFrom,
 		"NextDateTo":             nextDateTo,
+		"PeriodStartDay":         periodStartDay,
 		"PeriodStartMonth":       periodStartMonth,
 		"PeriodStartYear":        periodStartYear,
+		"PeriodEndDay":           periodEndDay,
 		"PeriodEndMonth":         periodEndMonth,
 		"PeriodEndYear":          periodEndYear,
 		"ViewMode":               viewMode,
@@ -442,34 +417,8 @@ func (h *ActivityHandler) ActivityAPI(w http.ResponseWriter, r *http.Request) {
 	dateFromParam := r.URL.Query().Get("date_from")
 	dateToParam := r.URL.Query().Get("date_to")
 
-	var startDate, endDate string
-	if dateFromParam != "" || dateToParam != "" {
-		df := dateFromParam
-		dt := dateToParam
-		if df == "" {
-			df = dt
-		}
-		if dt == "" {
-			dt = df
-		}
-		if len(df) >= 7 && len(dt) >= 7 {
-			df = df[:7]
-			dt = dt[:7]
-			if df > dt {
-				df, dt = dt, df
-			}
-			mKeys := buildMonthKeysFromRange(df, dt)
-			if len(mKeys) > 0 {
-				sy, sm := parseMonthKey(mKeys[0])
-				ey, em := parseMonthKey(mKeys[len(mKeys)-1])
-				startDate = fmt.Sprintf("%04d-%02d-01", sy, sm)
-				lastDay := time.Date(ey, time.Month(em)+1, 0, 0, 0, 0, 0, time.UTC)
-				endDate = lastDay.Format("2006-01-02")
-			}
-		}
-	}
-
-	if startDate == "" {
+	startDate, endDate, _, isRange := parseActivityDateRange(dateFromParam, dateToParam)
+	if !isRange {
 		if teamID == 0 || year == 0 || month == 0 {
 			jsonError(w, "Paramètres manquants", http.StatusBadRequest)
 			return
@@ -589,6 +538,57 @@ func parseMonthKey(key string) (year, month int) {
 		return t.Year(), int(t.Month())
 	}
 	return 0, 0
+}
+
+// parseActivityDate parses a "YYYY-MM-DD" or "YYYY-MM" string. If isEnd is true and
+// the input is "YYYY-MM", it returns the last day of that month.
+func parseActivityDate(s string, isEnd bool) (time.Time, bool) {
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return t, true
+	}
+	if t, err := time.Parse("2006-01", s); err == nil {
+		if isEnd {
+			lastDay := time.Date(t.Year(), t.Month()+1, 0, 0, 0, 0, 0, time.UTC)
+			return lastDay, true
+		}
+		return t, true
+	}
+	return time.Time{}, false
+}
+
+// parseActivityDateRange extracts startDate, endDate, and overlapping monthKeys from
+// date_from and date_to parameters. Supports "YYYY-MM-DD" and "YYYY-MM". Auto-swaps
+// inverted inputs and falls back to a single date if only one is provided.
+func parseActivityDateRange(dateFrom, dateTo string) (startDate, endDate string, monthKeys []string, isRange bool) {
+	if dateFrom == "" && dateTo == "" {
+		return "", "", nil, false
+	}
+	if dateFrom == "" {
+		dateFrom = dateTo
+	}
+	if dateTo == "" {
+		dateTo = dateFrom
+	}
+	startT, okFrom := parseActivityDate(dateFrom, false)
+	endT, okTo := parseActivityDate(dateTo, true)
+	if !okFrom || !okTo {
+		return "", "", nil, false
+	}
+	if startT.After(endT) {
+		startT, _ = parseActivityDate(dateTo, false)
+		endT, _ = parseActivityDate(dateFrom, true)
+	}
+	startDate = startT.Format("2006-01-02")
+	endDate = endT.Format("2006-01-02")
+	isRange = true
+
+	cur := time.Date(startT.Year(), startT.Month(), 1, 0, 0, 0, 0, time.UTC)
+	endMonth := time.Date(endT.Year(), endT.Month(), 1, 0, 0, 0, 0, time.UTC)
+	for !cur.After(endMonth) && len(monthKeys) < 24 {
+		monthKeys = append(monthKeys, cur.Format("2006-01"))
+		cur = cur.AddDate(0, 1, 0)
+	}
+	return startDate, endDate, monthKeys, true
 }
 
 // computeWorkingDaysFromRange counts working days (Mon–Fri) and non-imputable holidays
@@ -774,39 +774,48 @@ func teamHasManualTimesheets(teams []models.Team, teamID int64) bool {
 // billable days whose activities are fully declared (100%, or 50% for half
 // days), instead of the sum of declared project-time-entry days.
 func (h *ActivityHandler) computeManualProjectActivity(stats []models.UserStats, year, month int) (projectActivityByUser map[int64]float64, totalProjectDeclared float64) {
-	return h.computeManualProjectActivityForMonths(stats, []string{fmt.Sprintf("%04d-%02d", year, month)})
+	startDate := fmt.Sprintf("%04d-%02d-01", year, month)
+	lastDay := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC).Day()
+	endDate := fmt.Sprintf("%04d-%02d-%02d", year, month, lastDay)
+	return h.computeManualProjectActivityForRange(stats, startDate, endDate)
 }
 
 // computeManualProjectActivityForMonths returns the per-user manual project activity
 // percentage summed across all specified months.
 func (h *ActivityHandler) computeManualProjectActivityForMonths(stats []models.UserStats, monthKeys []string) (projectActivityByUser map[int64]float64, totalProjectDeclared float64) {
+	if len(monthKeys) == 0 {
+		return make(map[int64]float64), 0
+	}
+	sy, sm := parseMonthKey(monthKeys[0])
+	ey, em := parseMonthKey(monthKeys[len(monthKeys)-1])
+	startDate := fmt.Sprintf("%04d-%02d-01", sy, sm)
+	lastDay := time.Date(ey, time.Month(em)+1, 0, 0, 0, 0, 0, time.UTC).Day()
+	endDate := fmt.Sprintf("%04d-%02d-%02d", ey, em, lastDay)
+	return h.computeManualProjectActivityForRange(stats, startDate, endDate)
+}
+
+// computeManualProjectActivityForRange returns the per-user manual project activity
+// percentage and total declared days for the exact date range [startDate, endDate].
+func (h *ActivityHandler) computeManualProjectActivityForRange(stats []models.UserStats, startDate, endDate string) (projectActivityByUser map[int64]float64, totalProjectDeclared float64) {
 	projectActivityByUser = make(map[int64]float64)
 	for _, s := range stats {
-		var userDeclared float64
-		hasData := false
-		for _, mk := range monthKeys {
-			y, m := parseMonthKey(mk)
-			weights, err := h.DB.GetUserBillableDatesForMonth(s.User.ID, y, m)
-			if err != nil {
-				continue
-			}
-			activities, err := h.DB.ListUserActivitiesForMonth(s.User.ID, y, m)
-			if err != nil {
-				continue
-			}
-			hasData = true
-			sumByDate := make(map[string]float64)
-			for _, a := range activities {
-				sumByDate[a.Date] += a.Percentage
-			}
-			for date, weight := range weights {
-				if isDateComplete(sumByDate[date], weight) {
-					userDeclared += weight
-				}
-			}
-		}
-		if !hasData {
+		weights, err := h.DB.GetUserBillableDatesForRange(s.User.ID, startDate, endDate)
+		if err != nil {
 			continue
+		}
+		activities, err := h.DB.ListUserActivitiesForRange(s.User.ID, startDate, endDate)
+		if err != nil {
+			continue
+		}
+		sumByDate := make(map[string]float64)
+		for _, a := range activities {
+			sumByDate[a.Date] += a.Percentage
+		}
+		var userDeclared float64
+		for date, weight := range weights {
+			if isDateComplete(sumByDate[date], weight) {
+				userDeclared += weight
+			}
 		}
 		totalProjectDeclared += userDeclared
 		if s.BillableDays > 0 {

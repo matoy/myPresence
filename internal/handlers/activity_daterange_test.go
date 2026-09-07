@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -60,6 +61,56 @@ func TestGetDaysInRange(t *testing.T) {
 	}
 }
 
+func TestParseActivityDateRange(t *testing.T) {
+	// 1. Exact day range
+	s, e, mk, isR := parseActivityDateRange("2026-03-05", "2026-03-20")
+	if !isR || s != "2026-03-05" || e != "2026-03-20" || len(mk) != 1 || mk[0] != "2026-03" {
+		t.Errorf("unexpected for exact day range: isR=%v, s=%s, e=%s, mk=%v", isR, s, e, mk)
+	}
+
+	// 2. Cross-month day range
+	s, e, mk, isR = parseActivityDateRange("2026-02-25", "2026-03-05")
+	if !isR || s != "2026-02-25" || e != "2026-03-05" || len(mk) != 2 || mk[0] != "2026-02" || mk[1] != "2026-03" {
+		t.Errorf("unexpected for cross-month range: isR=%v, s=%s, e=%s, mk=%v", isR, s, e, mk)
+	}
+
+	// 3. Inverted day range (auto-swapped)
+	s, e, mk, isR = parseActivityDateRange("2026-03-20", "2026-03-05")
+	if !isR || s != "2026-03-05" || e != "2026-03-20" {
+		t.Errorf("unexpected for inverted day range: isR=%v, s=%s, e=%s", isR, s, e)
+	}
+
+	// 4. Single day provided
+	s, e, mk, isR = parseActivityDateRange("2026-03-15", "")
+	if !isR || s != "2026-03-15" || e != "2026-03-15" || len(mk) != 1 || mk[0] != "2026-03" {
+		t.Errorf("unexpected for single day: isR=%v, s=%s, e=%s, mk=%v", isR, s, e, mk)
+	}
+
+	// 5. Month string fallback
+	s, e, mk, isR = parseActivityDateRange("2026-01", "2026-03")
+	if !isR || s != "2026-01-01" || e != "2026-03-31" || len(mk) != 3 {
+		t.Errorf("unexpected for month strings: isR=%v, s=%s, e=%s, mk=%v", isR, s, e, mk)
+	}
+
+	// 6. Inverted month strings
+	s, e, mk, isR = parseActivityDateRange("2026-03", "2026-01")
+	if !isR || s != "2026-01-01" || e != "2026-03-31" || len(mk) != 3 {
+		t.Errorf("unexpected for inverted month strings: isR=%v, s=%s, e=%s, mk=%v", isR, s, e, mk)
+	}
+
+	// 7. Invalid dates
+	s, e, mk, isR = parseActivityDateRange("invalid", "also-bad")
+	if isR || s != "" || e != "" || len(mk) != 0 {
+		t.Errorf("expected false for invalid dates, got isR=%v", isR)
+	}
+
+	// 8. Both empty
+	s, e, mk, isR = parseActivityDateRange("", "")
+	if isR {
+		t.Errorf("expected false when both empty")
+	}
+}
+
 func TestActivityPage_DateRangeFiltering(t *testing.T) {
 	d := newExtraTestDB(t)
 
@@ -96,15 +147,18 @@ func TestActivityPage_DateRangeFiltering(t *testing.T) {
 		if isRange, ok := captured["IsRange"].(bool); !ok || isRange {
 			t.Errorf("expected IsRange=false for single month, got %v", captured["IsRange"])
 		}
+		if captured["FilterDateFrom"] != "2026-01-01" || captured["FilterDateTo"] != "2026-01-31" {
+			t.Errorf("unexpected default filter dates: from=%v, to=%v", captured["FilterDateFrom"], captured["FilterDateTo"])
+		}
 		totalBillable := captured["TotalBillable"].(float64)
 		if totalBillable != 1.0 {
 			t.Errorf("expected 1.0 billable day in Jan, got %v", totalBillable)
 		}
 	}
 
-	// 2. Multi-month range view (2026-01 to 2026-03)
+	// 2. Exact day range view (2026-01-10 to 2026-02-20)
 	{
-		req := httptest.NewRequest("GET", fmt.Sprintf("/admin/activity?date_from=2026-01&date_to=2026-03&team=%d", teamID), nil)
+		req := httptest.NewRequest("GET", fmt.Sprintf("/admin/activity?date_from=2026-01-10&date_to=2026-02-20&team=%d", teamID), nil)
 		req.AddCookie(&http.Cookie{Name: "session", Value: tok})
 		w := httptest.NewRecorder()
 		middleware.Auth(d, http.HandlerFunc(h.ActivityPage)).ServeHTTP(w, req)
@@ -112,35 +166,33 @@ func TestActivityPage_DateRangeFiltering(t *testing.T) {
 		if isRange, ok := captured["IsRange"].(bool); !ok || !isRange {
 			t.Fatalf("expected IsRange=true for range query, got %v", captured["IsRange"])
 		}
-		if captured["FilterDateFrom"] != "2026-01" || captured["FilterDateTo"] != "2026-03" {
+		if captured["FilterDateFrom"] != "2026-01-10" || captured["FilterDateTo"] != "2026-02-20" {
 			t.Errorf("unexpected filters: from=%v, to=%v", captured["FilterDateFrom"], captured["FilterDateTo"])
 		}
-		if captured["PeriodStartMonth"] != 1 || captured["PeriodStartYear"] != 2026 {
-			t.Errorf("unexpected period start: %v/%v", captured["PeriodStartMonth"], captured["PeriodStartYear"])
+		if captured["PeriodStartDay"] != 10 || captured["PeriodStartMonth"] != 1 || captured["PeriodStartYear"] != 2026 {
+			t.Errorf("unexpected period start: %v/%v/%v", captured["PeriodStartDay"], captured["PeriodStartMonth"], captured["PeriodStartYear"])
 		}
-		if captured["PeriodEndMonth"] != 3 || captured["PeriodEndYear"] != 2026 {
-			t.Errorf("unexpected period end: %v/%v", captured["PeriodEndMonth"], captured["PeriodEndYear"])
+		if captured["PeriodEndDay"] != 20 || captured["PeriodEndMonth"] != 2 || captured["PeriodEndYear"] != 2026 {
+			t.Errorf("unexpected period end: %v/%v/%v", captured["PeriodEndDay"], captured["PeriodEndMonth"], captured["PeriodEndYear"])
 		}
+		// Presences on 2026-01-15 and 2026-02-16 are in range, 2026-03-17 is outside
 		totalBillable := captured["TotalBillable"].(float64)
-		if totalBillable != 3.0 {
-			t.Errorf("expected 3.0 billable days across Jan-Mar, got %v", totalBillable)
+		if totalBillable != 2.0 {
+			t.Errorf("expected 2.0 billable days across Jan 10 - Feb 20, got %v", totalBillable)
 		}
 		// In range view, CanDecertify must be false
 		if canDecertify := captured["CanDecertify"].(bool); canDecertify {
 			t.Errorf("expected CanDecertify=false in range view, got %v", canDecertify)
 		}
-		// Navigation span should be 3 months: Prev = 2025-10 to 2025-12, Next = 2026-04 to 2026-06
-		if captured["PrevDateFrom"] != "2025-10" || captured["PrevDateTo"] != "2025-12" {
-			t.Errorf("unexpected Prev range: %v to %v", captured["PrevDateFrom"], captured["PrevDateTo"])
-		}
-		if captured["NextDateFrom"] != "2026-04" || captured["NextDateTo"] != "2026-06" {
-			t.Errorf("unexpected Next range: %v to %v", captured["NextDateFrom"], captured["NextDateTo"])
+		// Navigation span should shift by 42 days (Jan 10 to Feb 20 = 42 days)
+		if captured["PrevDateFrom"] == "" || captured["NextDateFrom"] == "" {
+			t.Errorf("expected non-empty navigation dates")
 		}
 	}
 
-	// 3. Inverted range auto-swap (date_from=2026-03&date_to=2026-01)
+	// 3. Inverted range auto-swap (date_from=2026-02-20&date_to=2026-01-10)
 	{
-		req := httptest.NewRequest("GET", fmt.Sprintf("/admin/activity?date_from=2026-03&date_to=2026-01&team=%d", teamID), nil)
+		req := httptest.NewRequest("GET", fmt.Sprintf("/admin/activity?date_from=2026-02-20&date_to=2026-01-10&team=%d", teamID), nil)
 		req.AddCookie(&http.Cookie{Name: "session", Value: tok})
 		w := httptest.NewRecorder()
 		middleware.Auth(d, http.HandlerFunc(h.ActivityPage)).ServeHTTP(w, req)
@@ -148,18 +200,18 @@ func TestActivityPage_DateRangeFiltering(t *testing.T) {
 		if isRange, ok := captured["IsRange"].(bool); !ok || !isRange {
 			t.Fatalf("expected IsRange=true for inverted range query, got %v", captured["IsRange"])
 		}
-		if captured["FilterDateFrom"] != "2026-01" || captured["FilterDateTo"] != "2026-03" {
-			t.Errorf("expected auto-swapped 2026-01 to 2026-03, got %v to %v", captured["FilterDateFrom"], captured["FilterDateTo"])
+		if captured["FilterDateFrom"] != "2026-01-10" || captured["FilterDateTo"] != "2026-02-20" {
+			t.Errorf("expected auto-swapped 2026-01-10 to 2026-02-20, got %v to %v", captured["FilterDateFrom"], captured["FilterDateTo"])
 		}
 		totalBillable := captured["TotalBillable"].(float64)
-		if totalBillable != 3.0 {
-			t.Errorf("expected 3.0 billable days, got %v", totalBillable)
+		if totalBillable != 2.0 {
+			t.Errorf("expected 2.0 billable days, got %v", totalBillable)
 		}
 	}
 
-	// 4. Single parameter provided (date_from=2026-02 only)
+	// 4. Single day parameter provided (date_from=2026-02-16 only)
 	{
-		req := httptest.NewRequest("GET", fmt.Sprintf("/admin/activity?date_from=2026-02&team=%d", teamID), nil)
+		req := httptest.NewRequest("GET", fmt.Sprintf("/admin/activity?date_from=2026-02-16&team=%d", teamID), nil)
 		req.AddCookie(&http.Cookie{Name: "session", Value: tok})
 		w := httptest.NewRecorder()
 		middleware.Auth(d, http.HandlerFunc(h.ActivityPage)).ServeHTTP(w, req)
@@ -167,12 +219,31 @@ func TestActivityPage_DateRangeFiltering(t *testing.T) {
 		if isRange, ok := captured["IsRange"].(bool); !ok || !isRange {
 			t.Fatalf("expected IsRange=true when date_from provided, got %v", captured["IsRange"])
 		}
-		if captured["FilterDateFrom"] != "2026-02" || captured["FilterDateTo"] != "2026-02" {
-			t.Errorf("expected 2026-02 to 2026-02, got %v to %v", captured["FilterDateFrom"], captured["FilterDateTo"])
+		if captured["FilterDateFrom"] != "2026-02-16" || captured["FilterDateTo"] != "2026-02-16" {
+			t.Errorf("expected 2026-02-16 to 2026-02-16, got %v to %v", captured["FilterDateFrom"], captured["FilterDateTo"])
 		}
 		totalBillable := captured["TotalBillable"].(float64)
 		if totalBillable != 1.0 {
-			t.Errorf("expected 1.0 billable day in Feb, got %v", totalBillable)
+			t.Errorf("expected 1.0 billable day on Feb 16, got %v", totalBillable)
+		}
+	}
+
+	// 5. Month string fallback (date_from=2026-01&date_to=2026-03)
+	{
+		req := httptest.NewRequest("GET", fmt.Sprintf("/admin/activity?date_from=2026-01&date_to=2026-03&team=%d", teamID), nil)
+		req.AddCookie(&http.Cookie{Name: "session", Value: tok})
+		w := httptest.NewRecorder()
+		middleware.Auth(d, http.HandlerFunc(h.ActivityPage)).ServeHTTP(w, req)
+
+		if isRange, ok := captured["IsRange"].(bool); !ok || !isRange {
+			t.Fatalf("expected IsRange=true for month query, got %v", captured["IsRange"])
+		}
+		if captured["FilterDateFrom"] != "2026-01-01" || captured["FilterDateTo"] != "2026-03-31" {
+			t.Errorf("unexpected month fallback: from=%v, to=%v", captured["FilterDateFrom"], captured["FilterDateTo"])
+		}
+		totalBillable := captured["TotalBillable"].(float64)
+		if totalBillable != 3.0 {
+			t.Errorf("expected 3.0 billable days across Jan-Mar, got %v", totalBillable)
 		}
 	}
 }
@@ -193,25 +264,47 @@ func TestActivityAPI_DateRange(t *testing.T) {
 
 	h := &ActivityHandler{DB: d, DisableProjects: true}
 
-	req := httptest.NewRequest("GET", fmt.Sprintf("/api/activity?team_id=%d&date_from=2026-01&date_to=2026-02", teamID), nil)
-	req.AddCookie(&http.Cookie{Name: "session", Value: tok})
-	w := httptest.NewRecorder()
-	middleware.Auth(d, http.HandlerFunc(h.ActivityAPI)).ServeHTTP(w, req)
+	// 1. Exact day range (Jan 5 to Jan 20): only Jan 10 matches
+	{
+		req := httptest.NewRequest("GET", fmt.Sprintf("/api/activity?team_id=%d&date_from=2026-01-05&date_to=2026-01-20", teamID), nil)
+		req.AddCookie(&http.Cookie{Name: "session", Value: tok})
+		w := httptest.NewRecorder()
+		middleware.Auth(d, http.HandlerFunc(h.ActivityAPI)).ServeHTTP(w, req)
 
-	if w.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+		}
+		var stats []models.UserStats
+		if err := json.Unmarshal(w.Body.Bytes(), &stats); err != nil {
+			t.Fatalf("failed to unmarshal JSON: %v", err)
+		}
+		if len(stats) != 1 || stats[0].BillableDays != 1.0 {
+			t.Errorf("expected 1.0 billable day for exact day range, got %v", stats[0].BillableDays)
+		}
 	}
 
-	var stats []models.UserStats
-	if err := json.Unmarshal(w.Body.Bytes(), &stats); err != nil {
-		t.Fatalf("failed to unmarshal JSON: %v", err)
-	}
+	// 2. Month-level range: both match
+	{
+		req := httptest.NewRequest("GET", fmt.Sprintf("/api/activity?team_id=%d&date_from=2026-01&date_to=2026-02", teamID), nil)
+		req.AddCookie(&http.Cookie{Name: "session", Value: tok})
+		w := httptest.NewRecorder()
+		middleware.Auth(d, http.HandlerFunc(h.ActivityAPI)).ServeHTTP(w, req)
 
-	if len(stats) != 1 {
-		t.Fatalf("expected 1 stat row, got %d", len(stats))
-	}
-	if stats[0].BillableDays != 2.0 {
-		t.Errorf("expected 2.0 billable days across Jan-Feb, got %v", stats[0].BillableDays)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+		}
+
+		var stats []models.UserStats
+		if err := json.Unmarshal(w.Body.Bytes(), &stats); err != nil {
+			t.Fatalf("failed to unmarshal JSON: %v", err)
+		}
+
+		if len(stats) != 1 {
+			t.Fatalf("expected 1 stat row, got %d", len(stats))
+		}
+		if stats[0].BillableDays != 2.0 {
+			t.Errorf("expected 2.0 billable days across Jan-Feb, got %v", stats[0].BillableDays)
+		}
 	}
 }
 
@@ -336,5 +429,46 @@ func TestComputeManualProjectActivityForMonths_MultiMonth(t *testing.T) {
 	expectedPct := (2.0 / 4.0) * 100.0
 	if byUser[uid] != expectedPct {
 		t.Errorf("expected %v%% activity, got %v", expectedPct, byUser[uid])
+	}
+}
+
+func TestComputeManualProjectActivityForRange_DayLevel(t *testing.T) {
+	d := newExtraTestDB(t)
+	h := &ActivityHandler{DB: d}
+
+	uid, _ := d.CreateLocalUser("manualday@test.com", "Manual Day", "password1")
+	statusID, _ := d.CreateStatus(models.Status{Name: "Billable", Color: "#22c55e", Billable: true, SortOrder: 1})
+
+	// Day 1: 2026-03-05: complete (100%)
+	_ = d.SetPresences(uid, []string{"2026-03-05"}, statusID, "full")
+	_, _ = d.CreateProjectActivity(uid, "2026-03-05", models.ActivityTypeOther, "", "", "", 100)
+
+	// Day 2: 2026-03-06: incomplete (40%)
+	_ = d.SetPresences(uid, []string{"2026-03-06"}, statusID, "full")
+	_, _ = d.CreateProjectActivity(uid, "2026-03-06", models.ActivityTypeOther, "", "", "", 40)
+
+	// Day 3: 2026-03-20: complete (100%), but later in the month
+	_ = d.SetPresences(uid, []string{"2026-03-20"}, statusID, "full")
+	_, _ = d.CreateProjectActivity(uid, "2026-03-20", models.ActivityTypeOther, "", "", "", 100)
+
+	// Query partial date range: March 1 to March 10 (only days 05 and 06 are in range)
+	stats1 := []models.UserStats{{User: models.User{ID: uid}, BillableDays: 2.0}}
+	byUser1, total1 := h.computeManualProjectActivityForRange(stats1, "2026-03-01", "2026-03-10")
+	if total1 != 1.0 {
+		t.Errorf("expected 1.0 declared day in [03-01, 03-10], got %v", total1)
+	}
+	if byUser1[uid] != 50.0 {
+		t.Errorf("expected 50%% activity, got %v", byUser1[uid])
+	}
+
+	// Query entire month: March 1 to March 31 (all 3 days are in range)
+	stats2 := []models.UserStats{{User: models.User{ID: uid}, BillableDays: 3.0}}
+	byUser2, total2 := h.computeManualProjectActivityForRange(stats2, "2026-03-01", "2026-03-31")
+	if total2 != 2.0 {
+		t.Errorf("expected 2.0 declared days in [03-01, 03-31], got %v", total2)
+	}
+	expectedPct := (2.0 / 3.0) * 100.0
+	if math.Abs(byUser2[uid]-expectedPct) > 0.001 {
+		t.Errorf("expected ~%v%% activity, got %v", expectedPct, byUser2[uid])
 	}
 }

@@ -8,17 +8,16 @@ import (
 	"github.com/matoy/mypresence/internal/models"
 )
 
-// GetUserBillableDatesForMonth returns the billable weight (1.0 for a full day,
-// 0.5 for a half day) for each date in the given month that has a billable
+// GetUserBillableDatesForRange returns the billable weight (1.0 for a full day,
+// 0.5 for a half day) for each date in [startDate, endDate] that has a billable
 // presence status set for the user.
-func (d *DB) GetUserBillableDatesForMonth(userID int64, year, month int) (map[string]float64, error) {
-	datePrefix := fmt.Sprintf("%04d-%02d-%%", year, month)
+func (d *DB) GetUserBillableDatesForRange(userID int64, startDate, endDate string) (map[string]float64, error) {
 	rows, err := d.presence.Query(`
 SELECT p.date, p.half
 FROM presences p
 JOIN statuses s ON p.status_id = s.id
-WHERE p.user_id = ? AND p.date LIKE ? AND s.billable = ?
-ORDER BY p.date`, userID, datePrefix, true)
+WHERE p.user_id = ? AND p.date >= ? AND p.date <= ? AND s.billable = ?
+ORDER BY p.date`, userID, startDate, endDate, true)
 	if err != nil {
 		return nil, err
 	}
@@ -37,6 +36,15 @@ ORDER BY p.date`, userID, datePrefix, true)
 		result[date] += weight
 	}
 	return result, rows.Err()
+}
+
+// GetUserBillableDatesForMonth returns the billable weight (1.0 for a full day,
+// 0.5 for a half day) for each date in the given month that has a billable
+// presence status set for the user.
+func (d *DB) GetUserBillableDatesForMonth(userID int64, year, month int) (map[string]float64, error) {
+	startDate := fmt.Sprintf("%04d-%02d-01", year, month)
+	lastDay := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+	return d.GetUserBillableDatesForRange(userID, startDate, lastDay)
 }
 
 // GetUserBillableWeightForDate returns the billable weight (0, 0.5 or 1.0) for
@@ -67,19 +75,26 @@ WHERE p.user_id = ? AND p.date = ? AND s.billable = ?`, userID, date, true)
 	return weight, rows.Err()
 }
 
-// ListUserActivitiesForMonth returns all project activities declared by a user
-// for the given month, ordered by date then creation order.
-func (d *DB) ListUserActivitiesForMonth(userID int64, year, month int) ([]models.ProjectActivity, error) {
-	datePrefix := fmt.Sprintf("%04d-%02d-%%", year, month)
+// ListUserActivitiesForRange returns all project activities declared by a user
+// between startDate and endDate (inclusive), ordered by date then creation order.
+func (d *DB) ListUserActivitiesForRange(userID int64, startDate, endDate string) ([]models.ProjectActivity, error) {
 	rows, err := d.projects.Query(`
 SELECT id, user_id, date, activity_type, jira_key, jira_title, comment, percentage, created_at, updated_at
 FROM project_activities
-WHERE user_id = ? AND date LIKE ?
-ORDER BY date, id`, userID, datePrefix)
+WHERE user_id = ? AND date >= ? AND date <= ?
+ORDER BY date, id`, userID, startDate, endDate)
 	if err != nil {
 		return nil, err
 	}
 	return scanProjectActivities(rows)
+}
+
+// ListUserActivitiesForMonth returns all project activities declared by a user
+// for the given month, ordered by date then creation order.
+func (d *DB) ListUserActivitiesForMonth(userID int64, year, month int) ([]models.ProjectActivity, error) {
+	startDate := fmt.Sprintf("%04d-%02d-01", year, month)
+	lastDay := time.Date(year, time.Month(month)+1, 0, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+	return d.ListUserActivitiesForRange(userID, startDate, lastDay)
 }
 
 // GetActivitiesForUsersMonth returns all project activities declared by any of
