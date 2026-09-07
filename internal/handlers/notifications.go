@@ -79,11 +79,17 @@ func (h *NotificationsHandler) AdminNotificationsPage(w http.ResponseWriter, r *
 		teams = nil
 	}
 
+	sites, err := h.DB.ListSites()
+	if err != nil {
+		sites = nil
+	}
+
 	recentNotifs, _ := h.DB.GetAllNotifications(200)
 
 	h.Render(w, r, "admin_notifications", map[string]interface{}{
 		"Users":         users,
 		"Teams":         teams,
+		"Sites":         sites,
 		"Notifications": recentNotifs,
 		"Success":       r.URL.Query().Get("success"),
 		"Error":         r.URL.Query().Get("error"),
@@ -109,10 +115,11 @@ func (h *NotificationsHandler) AdminSendNotification(w http.ResponseWriter, r *h
 
 	if isJSON {
 		var payload struct {
-			Recipient  string   `json:"recipient"` // "all", "team:<id>", "user:<id>", comma-separated or user ID
+			Recipient  string   `json:"recipient"` // "all", "team:<id>", "site:<id>", "user:<id>", comma-separated or user ID
 			Recipients []string `json:"recipients"`
 			UserIDs    []int64  `json:"user_ids"`
 			TeamIDs    []int64  `json:"team_ids"`
+			SiteIDs    []int64  `json:"site_ids"`
 			UserID     int64    `json:"user_id"`
 			Type       string   `json:"type"`
 			Title      string   `json:"title"`
@@ -145,6 +152,11 @@ func (h *NotificationsHandler) AdminSendNotification(w http.ResponseWriter, r *h
 		for _, tid := range payload.TeamIDs {
 			if tid > 0 {
 				rawRecipients = append(rawRecipients, fmt.Sprintf("team:%d", tid))
+			}
+		}
+		for _, sid := range payload.SiteIDs {
+			if sid > 0 {
+				rawRecipients = append(rawRecipients, fmt.Sprintf("site:%d", sid))
 			}
 		}
 		if payload.UserID > 0 {
@@ -187,6 +199,9 @@ func (h *NotificationsHandler) AdminSendNotification(w http.ResponseWriter, r *h
 		}
 		for _, tVal := range r.Form["team_ids"] {
 			rawRecipients = append(rawRecipients, "team:"+tVal)
+		}
+		for _, sVal := range r.Form["site_ids"] {
+			rawRecipients = append(rawRecipients, "site:"+sVal)
 		}
 		notifType = r.FormValue("type")
 		title = r.FormValue("title")
@@ -262,6 +277,31 @@ func (h *NotificationsHandler) AdminSendNotification(w http.ResponseWriter, r *h
 			for _, m := range members {
 				if !m.Disabled {
 					targetUserIDs[m.ID] = true
+				}
+			}
+		} else if strings.HasPrefix(token, "site:") {
+			siteIDStr := strings.TrimPrefix(token, "site:")
+			siteID, err := strconv.ParseInt(siteIDStr, 10, 64)
+			if err != nil || siteID <= 0 {
+				if isJSON {
+					jsonError(w, "Invalid recipient ID", http.StatusBadRequest)
+				} else {
+					http.Redirect(w, r, "/admin/notifications?error=invalid_recipient", http.StatusSeeOther)
+				}
+				return
+			}
+			users, err := h.DB.GetUsersBySite(siteID)
+			if err != nil {
+				if isJSON {
+					jsonError(w, "Failed to load site users", http.StatusInternalServerError)
+				} else {
+					http.Redirect(w, r, "/admin/notifications?error=server_error", http.StatusSeeOther)
+				}
+				return
+			}
+			for _, u := range users {
+				if !u.Disabled {
+					targetUserIDs[u.ID] = true
 				}
 			}
 		} else {

@@ -61,6 +61,11 @@ func TestAdminNotificationsPage_GlobalAdmin(t *testing.T) {
 		t.Errorf("expected Teams in rendered data, got %v", renderedData["Teams"])
 	}
 	_ = teams
+	sites, ok := renderedData["Sites"].([]*models.Site)
+	if !ok {
+		t.Errorf("expected Sites in rendered data, got %v", renderedData["Sites"])
+	}
+	_ = sites
 	notifs, ok := renderedData["Notifications"].([]models.Notification)
 	if !ok || len(notifs) < 1 {
 		t.Errorf("expected Notifications in rendered data, got %v", renderedData["Notifications"])
@@ -580,6 +585,145 @@ func TestAdminSendNotification_MultipleTeams_Deduplicated(t *testing.T) {
 	notifsOutsider, _ := d.GetUnreadNotifications(outsider)
 	if len(notifsOutsider) != 0 {
 		t.Errorf("expected 0 notifications for outsider, got %d", len(notifsOutsider))
+	}
+}
+
+func TestAdminSendNotification_Site_JSON(t *testing.T) {
+	d := newCRUDTestDB(t)
+	h := &NotificationsHandler{DB: d}
+
+	adminID, _ := d.CreateLocalUser("admin_site@test.com", "Admin Site", "pass12345")
+	_ = d.UpdateUserRoles(adminID, models.RoleGlobal)
+	adminToken, _ := d.CreateSession(adminID)
+
+	siteID, _ := d.CreateSite(models.Site{Name: "Paris Campus", CountryCode: "FR"})
+	siteOtherID, _ := d.CreateSite(models.Site{Name: "Lyon Campus", CountryCode: "FR"})
+
+	u1, _ := d.CreateLocalUser("paris1@test.com", "Paris User 1", "pass12345")
+	u2, _ := d.CreateLocalUser("paris2@test.com", "Paris User 2", "pass12345")
+	uDisabled, _ := d.CreateLocalUser("paris_dis@test.com", "Paris Disabled", "pass12345")
+	_ = d.SetUserDisabled(uDisabled, true)
+	uOther, _ := d.CreateLocalUser("lyon1@test.com", "Lyon User", "pass12345")
+	uNoSite, _ := d.CreateLocalUser("nosite@test.com", "No Site", "pass12345")
+
+	_ = d.UpdateUserSite(u1, siteID)
+	_ = d.UpdateUserSite(u2, siteID)
+	_ = d.UpdateUserSite(uDisabled, siteID)
+	_ = d.UpdateUserSite(uOther, siteOtherID)
+
+	payload := map[string]interface{}{
+		"recipient": "site:" + strconv.FormatInt(siteID, 10),
+		"type":      "warning",
+		"title":     "Building Maintenance",
+		"message":   "Fire drill scheduled at 14:00 today in Paris.",
+		"link":      "/floorplan",
+	}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/notifications", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session", Value: adminToken})
+	rec := httptest.NewRecorder()
+
+	middleware.Auth(d, http.HandlerFunc(h.AdminSendNotification)).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]interface{}
+	_ = json.NewDecoder(rec.Body).Decode(&resp)
+	if resp["count"] != float64(2) {
+		t.Errorf("expected count 2, got %v", resp["count"])
+	}
+
+	// u1 and u2 must have received it
+	for _, uid := range []int64{u1, u2} {
+		notifs, err := d.GetUnreadNotifications(uid)
+		if err != nil {
+			t.Fatalf("GetUnreadNotifications for %d: %v", uid, err)
+		}
+		if len(notifs) != 1 {
+			t.Errorf("expected 1 notification for site member %d, got %d", uid, len(notifs))
+		}
+		if notifs[0].Title != "Building Maintenance" {
+			t.Errorf("expected title 'Building Maintenance', got %q", notifs[0].Title)
+		}
+	}
+
+	// Disabled user must NOT have received it
+	notifsDis, _ := d.GetUnreadNotifications(uDisabled)
+	if len(notifsDis) != 0 {
+		t.Errorf("expected 0 notifications for disabled user, got %d", len(notifsDis))
+	}
+
+	// Other site user and no site user must NOT have received it
+	for _, uid := range []int64{uOther, uNoSite} {
+		notifs, _ := d.GetUnreadNotifications(uid)
+		if len(notifs) != 0 {
+			t.Errorf("expected 0 notifications for user %d, got %d", uid, len(notifs))
+		}
+	}
+}
+
+func TestAdminSendNotification_MultipleSites_JSON(t *testing.T) {
+	d := newCRUDTestDB(t)
+	h := &NotificationsHandler{DB: d}
+
+	adminID, _ := d.CreateLocalUser("admin_multisite@test.com", "Admin Multi", "pass12345")
+	_ = d.UpdateUserRoles(adminID, models.RoleGlobal)
+	adminToken, _ := d.CreateSession(adminID)
+
+	s1, _ := d.CreateSite(models.Site{Name: "Site Alpha", CountryCode: "FR"})
+	s2, _ := d.CreateSite(models.Site{Name: "Site Beta", CountryCode: "US"})
+	s3, _ := d.CreateSite(models.Site{Name: "Site Gamma", CountryCode: "DE"})
+
+	uA, _ := d.CreateLocalUser("user_a@test.com", "User A", "pass12345")
+	uB, _ := d.CreateLocalUser("user_b@test.com", "User B", "pass12345")
+	uC, _ := d.CreateLocalUser("user_c@test.com", "User C", "pass12345")
+
+	_ = d.UpdateUserSite(uA, s1)
+	_ = d.UpdateUserSite(uB, s2)
+	_ = d.UpdateUserSite(uC, s3)
+
+	payload := map[string]interface{}{
+		"recipient": fmt.Sprintf("site:%d,%d", s1, s2),
+		"site_ids":  []int64{s1, s2},
+		"type":      "info",
+		"title":     "Dual Site Update",
+		"message":   "Notice for Alpha and Beta",
+	}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/notifications", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session", Value: adminToken})
+	rec := httptest.NewRecorder()
+
+	middleware.Auth(d, http.HandlerFunc(h.AdminSendNotification)).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d (%s)", rec.Code, rec.Body.String())
+	}
+
+	var resp map[string]interface{}
+	_ = json.NewDecoder(rec.Body).Decode(&resp)
+	if resp["count"] != float64(2) {
+		t.Errorf("expected count 2, got %v", resp["count"])
+	}
+
+	// uA and uB must have received it
+	for _, uid := range []int64{uA, uB} {
+		notifs, err := d.GetUnreadNotifications(uid)
+		if err != nil || len(notifs) != 1 {
+			t.Errorf("expected 1 notification for user %d, got %d", uid, len(notifs))
+		}
+	}
+
+	// uC from Site Gamma must NOT have received it
+	notifsC, _ := d.GetUnreadNotifications(uC)
+	if len(notifsC) != 0 {
+		t.Errorf("expected 0 notifications for user C, got %d", len(notifsC))
 	}
 }
 

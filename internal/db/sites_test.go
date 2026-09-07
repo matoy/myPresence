@@ -199,3 +199,29 @@ func TestGetSiteReservableSeats(t *testing.T) {
 	}
 }
 
+func TestGetUsersBySite(t *testing.T) {
+	d := newTestDB(t)
+
+	sID, _ := d.CreateSite(models.Site{Name: "Lyon Tech", CountryCode: "FR"})
+
+	u1, _ := d.CreateLocalUser("lyon_u1@test.com", "Alice Lyon", "pass12345")
+	u2, _ := d.CreateLocalUser("lyon_u2@test.com", "Bob Lyon", "pass12345")
+	u3, _ := d.CreateLocalUser("other_u3@test.com", "Charlie Other", "pass12345")
+
+	_ = d.UpdateUserSite(u1, sID)
+	_ = d.UpdateUserSite(u2, sID)
+
+	users, err := d.GetUsersBySite(sID)
+	if err != nil {
+		t.Fatalf("GetUsersBySite: %v", err)
+	}
+
+	if len(users) != 2 {
+		t.Fatalf("expected 2 users, got %d", len(users))
+	}
+	if users[0].SiteName != "Lyon Tech" {
+		t.Errorf("expected hydrated SiteName 'Lyon Tech', got %q", users[0].SiteName)
+	}
+	_ = u3
+}
+

@@ -1302,6 +1302,29 @@ func (d *DB) UpdateUserSite(userID, siteID int64) error {
 	return err
 }
 
+// GetUsersBySite returns all users assigned to a site.
+func (d *DB) GetUsersBySite(siteID int64) ([]models.User, error) {
+	rows, err := d.core.Query(d.dialect.rebind("SELECT id, email, name, role, COALESCE(password_hash,''), disabled, created_at, COALESCE(site_id, 0) FROM users WHERE site_id = ? ORDER BY name"), siteID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck
+
+	var users []models.User
+	for rows.Next() {
+		var u models.User
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt, &u.SiteID); err != nil {
+			return nil, err
+		}
+		u.IsLocal = u.PasswordHash != ""
+		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return d.HydrateUsersSites(users), nil
+}
+
 // HydrateUsersSites populates SiteName and SiteCountryCode on the given users using ListSites.
 func (d *DB) HydrateUsersSites(users []models.User) []models.User {
 	sites, err := d.ListSites()

@@ -66,8 +66,8 @@
                         {{index $.T "notifications.recipient"}} <span class="text-red-500">*</span>
                     </label>
                     
-                    <!-- Segmented Mode Tabs (Individual, Team, Everyone) -->
-                    <div class="grid grid-cols-3 gap-1 p-1 bg-gray-100 rounded-lg mb-2.5 text-xs font-medium">
+                    <!-- Segmented Mode Tabs (Individual, Team, Site, Everyone) -->
+                    <div class="grid grid-cols-4 gap-1 p-1 bg-gray-100 rounded-lg mb-2.5 text-xs font-medium">
                         <button type="button"
                                 @click="recipientMode = 'user'"
                                 :class="recipientMode === 'user' ? 'bg-white text-primary shadow-sm font-semibold' : 'text-gray-600 hover:text-gray-900'"
@@ -79,6 +79,12 @@
                                 :class="recipientMode === 'team' ? 'bg-white text-primary shadow-sm font-semibold' : 'text-gray-600 hover:text-gray-900'"
                                 class="py-1.5 px-2 rounded-md transition text-center">
                             {{index $.T "notifications.mode_team"}}
+                        </button>
+                        <button type="button"
+                                @click="recipientMode = 'site'"
+                                :class="recipientMode === 'site' ? 'bg-white text-primary shadow-sm font-semibold' : 'text-gray-600 hover:text-gray-900'"
+                                class="py-1.5 px-2 rounded-md transition text-center">
+                            {{index $.T "notifications.mode_site"}}
                         </button>
                         <button type="button"
                                 @click="recipientMode = 'all'"
@@ -311,6 +317,131 @@
                                     </template>
                                     <div x-show="filteredTeams.length === 0" class="py-2.5 text-center text-xs text-gray-400">
                                         Aucune équipe trouvée
+                                    </div>
+                                </div>
+                                <div class="pt-1 border-t border-gray-100 flex justify-end">
+                                    <button type="button" @click="open = false" class="px-3 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-md transition cursor-pointer">
+                                        {{index $.T "notifications.done"}}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mode: SITE (Multi-select Searchable Dropdown) -->
+                    <div x-show="recipientMode === 'site'" class="space-y-2">
+                        <!-- Selected Sites Chips Container -->
+                        <div x-show="selectedSiteIds.length > 0" class="space-y-1">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-1.5">
+                                    <span class="w-2 h-2 rounded-full bg-emerald-600 inline-block"></span>
+                                    <span x-text="selectedSiteIds.length"></span>
+                                    <span>{{index $.T "notifications.selected_sites_label"}}</span>
+                                </span>
+                                <button type="button" @click="clearSelectedSites()" class="text-[11px] text-red-500 hover:text-red-700 font-medium transition cursor-pointer">
+                                    {{index $.T "notifications.clear_all"}}
+                                </button>
+                            </div>
+                            <div class="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-2 bg-gray-50 rounded-xl border border-gray-200">
+                                <template x-for="sid in selectedSiteIds" :key="sid">
+                                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-white text-gray-800 border border-gray-200 rounded-lg text-xs font-medium shadow-xs">
+                                        <svg class="h-3 w-3 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                                        </svg>
+                                        <span x-text="getSiteName(sid)" class="truncate max-w-[150px]"></span>
+                                        <template x-if="getSiteCountry(sid)">
+                                            <span class="px-1 py-0.2 bg-gray-100 text-gray-600 text-[10px] rounded font-mono font-semibold" x-text="getSiteCountry(sid)"></span>
+                                        </template>
+                                        <button type="button" @click.stop="toggleSite(sid)" class="text-gray-400 hover:text-red-500 rounded-full p-0.5 transition cursor-pointer" title="Retirer">
+                                            <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                        </button>
+                                    </span>
+                                </template>
+                            </div>
+                        </div>
+
+                        <!-- Site Selector Dropdown -->
+                        <div class="relative" x-data="{ open: false }" @click.outside="open = false">
+                            <button type="button"
+                                    @click="open = !open; if(open) $nextTick(() => $refs.siteSearchInput?.focus())"
+                                    class="w-full flex items-center justify-between px-3 py-2 text-xs bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-primary/50 text-left hover:border-gray-400 transition cursor-pointer">
+                                <span x-show="selectedSiteIds.length === 0" class="text-gray-400">-- {{index $.T "notifications.select_sites"}} --</span>
+                                <span x-show="selectedSiteIds.length > 0" class="font-semibold text-gray-900 flex items-center gap-2 truncate">
+                                    <svg class="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                                    </svg>
+                                    <span x-text="selectedSiteIds.length === 1 ? getSiteLabel(selectedSiteIds[0]) : (selectedSiteIds.length + ' {{index $.T "notifications.selected_sites_label"}}')"></span>
+                                </span>
+                                <div class="flex items-center gap-1.5 flex-shrink-0">
+                                    <span x-show="selectedSiteIds.length > 1" class="px-2 py-0.5 text-[10px] bg-primary/10 text-primary font-bold rounded-full" x-text="selectedSiteIds.length"></span>
+                                    <svg class="h-4 w-4 text-gray-400 transition-transform duration-200" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                                    </svg>
+                                </div>
+                            </button>
+                            
+                            <div x-show="open"
+                                 x-cloak
+                                 x-transition:enter="transition ease-out duration-100"
+                                 x-transition:enter-start="opacity-0 scale-95"
+                                 x-transition:enter-end="opacity-100 scale-100"
+                                 x-transition:leave="transition ease-in duration-75"
+                                 x-transition:leave-start="opacity-100 scale-100"
+                                 x-transition:leave-end="opacity-0 scale-95"
+                                 class="absolute z-30 mt-1 w-full bg-white rounded-xl shadow-xl border border-gray-200 p-2 space-y-2">
+                                <div class="relative">
+                                    <input type="text"
+                                           x-ref="siteSearchInput"
+                                           x-model="siteSearch"
+                                           placeholder="{{index $.T "notifications.search_placeholder"}}"
+                                           class="w-full pl-7 pr-6 py-1 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-primary focus:bg-white">
+                                    <svg class="h-3 w-3 text-gray-400 absolute left-2 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                                    </svg>
+                                    <button type="button" x-show="siteSearch" @click="siteSearch = ''" class="absolute right-1.5 top-1.5 text-gray-400 hover:text-gray-600 cursor-pointer">
+                                        <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                                    </button>
+                                </div>
+                                <div class="flex items-center justify-between px-1 py-1 text-[11px] border-b border-gray-100 text-gray-500">
+                                    <div class="flex items-center gap-2">
+                                        <button type="button" @click="selectAllFilteredSites()" class="text-primary hover:underline font-medium cursor-pointer">
+                                            {{index $.T "notifications.select_all"}}
+                                        </button>
+                                        <span>&bull;</span>
+                                        <button type="button" @click="clearSelectedSites()" class="text-gray-400 hover:text-red-500 transition cursor-pointer">
+                                            {{index $.T "notifications.deselect_all"}}
+                                        </button>
+                                    </div>
+                                    <span class="text-gray-400 font-medium" x-text="selectedSiteIds.length + ' {{index $.T "notifications.selected_sites_label"}}'"></span>
+                                </div>
+                                <div class="max-h-48 overflow-y-auto space-y-0.5 custom-scrollbar">
+                                    <template x-for="s in filteredSites" :key="s.id">
+                                        <button type="button"
+                                                @click="toggleSite(s.id)"
+                                                class="w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded-lg transition text-left cursor-pointer"
+                                                :class="isSiteSelected(s.id) ? 'bg-primary/10 text-primary font-semibold' : 'text-gray-500 font-medium hover:bg-gray-50'">
+                                            <div class="flex items-center gap-2 truncate">
+                                                <input type="checkbox"
+                                                       :checked="isSiteSelected(s.id)"
+                                                       class="h-3.5 w-3.5 text-primary rounded border-gray-300 pointer-events-none">
+                                                <div class="truncate flex items-center gap-1.5">
+                                                    <svg class="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                                                    </svg>
+                                                    <span class="font-medium text-gray-900" x-text="s.name"></span>
+                                                    <template x-if="s.country_code">
+                                                        <span class="px-1 py-0.2 bg-gray-100 text-gray-600 text-[10px] rounded font-mono font-semibold" x-text="s.country_code"></span>
+                                                    </template>
+                                                    <span class="text-[10px] text-gray-400 font-normal" x-text="'(' + getSiteUserCount(s.id) + ' membres)'"></span>
+                                                </div>
+                                            </div>
+                                            <svg x-show="isSiteSelected(s.id)" class="h-3.5 w-3.5 text-primary flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                                            </svg>
+                                        </button>
+                                    </template>
+                                    <div x-show="filteredSites.length === 0" class="py-2.5 text-center text-xs text-gray-400">
+                                        {{index $.T "notifications.no_sites_found"}}
                                     </div>
                                 </div>
                                 <div class="pt-1 border-t border-gray-100 flex justify-end">
@@ -623,6 +754,7 @@
 <!-- Safe JSON data payloads -->
 <script id="admin-notif-users-data" type="application/json">{{json .Users}}</script>
 <script id="admin-notif-teams-data" type="application/json">{{json .Teams}}</script>
+<script id="admin-notif-sites-data" type="application/json">{{json .Sites}}</script>
 <script id="admin-notif-history-data" type="application/json">{{json .Notifications}}</script>
 
 <script>
@@ -639,6 +771,12 @@ function adminNotifications() {
         try { teams = JSON.parse(teamsEl.textContent) || []; } catch(e) {}
     }
 
+    let sites = [];
+    const sitesEl = document.getElementById('admin-notif-sites-data');
+    if (sitesEl && sitesEl.textContent) {
+        try { sites = JSON.parse(sitesEl.textContent) || []; } catch(e) {}
+    }
+
     let notifications = [];
     const notifsEl = document.getElementById('admin-notif-history-data');
     if (notifsEl && notifsEl.textContent) {
@@ -648,13 +786,17 @@ function adminNotifications() {
     return {
         users: Array.isArray(users) ? users : [],
         teams: Array.isArray(teams) ? teams : [],
+        sites: Array.isArray(sites) ? sites : [],
         notifications: Array.isArray(notifications) ? notifications : [],
-        recipientMode: 'user', // 'user', 'team', 'all'
+        recipientMode: 'user', // 'user', 'team', 'site', 'all'
         selectedTeamIds: [],
+        selectedSiteIds: [],
         selectedUserIds: [],
         selectedTeamId: '',
+        selectedSiteId: '',
         selectedUserId: '',
         teamSearch: '',
+        siteSearch: '',
         userSearch: '',
         searchQuery: '',
         notifType: 'info',
@@ -774,6 +916,65 @@ function adminNotifications() {
             return t ? t.name : ('Team #' + id);
         },
 
+        get filteredSites() {
+            if (!this.siteSearch.trim()) return this.sites;
+            const q = this.siteSearch.toLowerCase();
+            return this.sites.filter(s => 
+                (s.name && s.name.toLowerCase().includes(q)) || 
+                (s.country_code && s.country_code.toLowerCase().includes(q))
+            );
+        },
+
+        getSiteUserCount(siteId) {
+            return this.users.filter(u => !u.disabled && Number(u.site_id) === Number(siteId)).length;
+        },
+
+        toggleSite(id) {
+            id = Number(id);
+            const idx = this.selectedSiteIds.indexOf(id);
+            if (idx >= 0) {
+                this.selectedSiteIds.splice(idx, 1);
+            } else {
+                this.selectedSiteIds.push(id);
+            }
+            this.selectedSiteId = this.selectedSiteIds.length > 0 ? String(this.selectedSiteIds[0]) : '';
+        },
+
+        isSiteSelected(id) {
+            return this.selectedSiteIds.includes(Number(id));
+        },
+
+        selectAllFilteredSites() {
+            for (const s of this.filteredSites) {
+                const id = Number(s.id);
+                if (!this.selectedSiteIds.includes(id)) {
+                    this.selectedSiteIds.push(id);
+                }
+            }
+            this.selectedSiteId = this.selectedSiteIds.length > 0 ? String(this.selectedSiteIds[0]) : '';
+        },
+
+        clearSelectedSites() {
+            this.selectedSiteIds = [];
+            this.selectedSiteId = '';
+        },
+
+        getSiteName(id) {
+            const s = this.sites.find(st => Number(st.id) === Number(id));
+            return s ? s.name : ('Site #' + id);
+        },
+
+        getSiteCountry(id) {
+            const s = this.sites.find(st => Number(st.id) === Number(id));
+            return s && s.country_code ? s.country_code : '';
+        },
+
+        getSiteLabel(id) {
+            const s = this.sites.find(st => Number(st.id) === Number(id));
+            if (!s) return 'Site #' + id;
+            return s.name + (s.country_code ? ' (' + s.country_code + ')' : '');
+        },
+
         get sortedAndFilteredNotifications() {
             let list = [...this.notifications];
             // Sort: newest first
@@ -809,6 +1010,9 @@ function adminNotifications() {
 
         getRecipientValue() {
             if (this.recipientMode === 'all') return 'all';
+            if (this.recipientMode === 'site') {
+                return this.selectedSiteIds.length > 0 ? ('site:' + this.selectedSiteIds.join(',')) : '';
+            }
             if (this.recipientMode === 'team') {
                 return this.selectedTeamIds.length > 0 ? ('team:' + this.selectedTeamIds.join(',')) : '';
             }
@@ -822,6 +1026,17 @@ function adminNotifications() {
             const t = window._t || {};
             if (this.recipientMode === 'all') {
                 return (t['notifications.all_users'] || 'All active users') + ' (' + this.activeUsersCount + ')';
+            }
+            if (this.recipientMode === 'site') {
+                if (this.selectedSiteIds.length === 0) return '';
+                if (this.selectedSiteIds.length === 1) {
+                    return this.getSiteLabel(this.selectedSiteIds[0]);
+                }
+                const names = this.selectedSiteIds.map(id => this.getSiteName(id));
+                if (names.length <= 3) {
+                    return names.length + ' sites : ' + names.join(', ');
+                }
+                return names.length + ' sites sélectionnés (' + names.slice(0, 2).join(', ') + '...)';
             }
             if (this.recipientMode === 'team') {
                 if (this.selectedTeamIds.length === 0) return '';
@@ -885,6 +1100,7 @@ function adminNotifications() {
                         recipient: this.getRecipientValue(),
                         user_ids: this.recipientMode === 'user' ? this.selectedUserIds : [],
                         team_ids: this.recipientMode === 'team' ? this.selectedTeamIds : [],
+                        site_ids: this.recipientMode === 'site' ? this.selectedSiteIds : [],
                         type: this.notifType,
                         title: this.title.trim(),
                         message: this.message.trim(),
@@ -899,8 +1115,10 @@ function adminNotifications() {
                     this.link = '';
                     this.selectedUserIds = [];
                     this.selectedTeamIds = [];
+                    this.selectedSiteIds = [];
                     this.selectedUserId = '';
                     this.selectedTeamId = '';
+                    this.selectedSiteId = '';
                     setTimeout(() => { window.location.reload(); }, 800);
                 } else {
                     const data = await resp.json().catch(() => ({}));
