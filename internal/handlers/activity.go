@@ -120,8 +120,8 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 	var prevTime, nextTime time.Time
 
 	if isRange {
-		fmt.Sscanf(monthKeys[0], "%04d-%02d", &periodStartYear, &periodStartMonth)
-		fmt.Sscanf(monthKeys[len(monthKeys)-1], "%04d-%02d", &periodEndYear, &periodEndMonth)
+		periodStartYear, periodStartMonth = parseMonthKey(monthKeys[0])
+		periodEndYear, periodEndMonth = parseMonthKey(monthKeys[len(monthKeys)-1])
 		startDate = fmt.Sprintf("%04d-%02d-01", periodStartYear, periodStartMonth)
 		lastDay := time.Date(periodEndYear, time.Month(periodEndMonth)+1, 0, 0, 0, 0, 0, time.UTC)
 		endDate = lastDay.Format("2006-01-02")
@@ -299,8 +299,7 @@ func (h *ActivityHandler) ActivityPage(w http.ResponseWriter, r *http.Request) {
 			projectCertifiedUsers[uid] = true
 		}
 		for _, mk := range monthKeys {
-			var y, m int
-			fmt.Sscanf(mk, "%04d-%02d", &y, &m)
+			y, m := parseMonthKey(mk)
 			cMap, _ := h.DB.GetCertifiedUserIDs(statUserIDs, y, m)
 			pcMap, _ := h.DB.GetCertifiedProjectUserIDs(statUserIDs, y, m)
 			for _, uid := range statUserIDs {
@@ -461,9 +460,8 @@ func (h *ActivityHandler) ActivityAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			mKeys := buildMonthKeysFromRange(df, dt)
 			if len(mKeys) > 0 {
-				var sy, sm, ey, em int
-				fmt.Sscanf(mKeys[0], "%04d-%02d", &sy, &sm)
-				fmt.Sscanf(mKeys[len(mKeys)-1], "%04d-%02d", &ey, &em)
+				sy, sm := parseMonthKey(mKeys[0])
+				ey, em := parseMonthKey(mKeys[len(mKeys)-1])
 				startDate = fmt.Sprintf("%04d-%02d-01", sy, sm)
 				lastDay := time.Date(ey, time.Month(em)+1, 0, 0, 0, 0, 0, time.UTC)
 				endDate = lastDay.Format("2006-01-02")
@@ -585,6 +583,14 @@ func computeWorkingDaysFromMap(year, month int, holidayMap map[string]models.Hol
 	return
 }
 
+// parseMonthKey parses a "YYYY-MM" string into year and month ints.
+func parseMonthKey(key string) (year, month int) {
+	if t, err := time.Parse("2006-01", key); err == nil {
+		return t.Year(), int(t.Month())
+	}
+	return 0, 0
+}
+
 // computeWorkingDaysFromRange counts working days (Mon–Fri) and non-imputable holidays
 // within [startDate, endDate] (inclusive).
 func computeWorkingDaysFromRange(startDate, endDate string, holidayMap map[string]models.Holiday) (workingDays, holidayCount int) {
@@ -695,8 +701,7 @@ func (h *ActivityHandler) computeExecSummary(
 			}
 			if !h.DisableProjects {
 				for _, mk := range monthKeys {
-					var y, m int
-					fmt.Sscanf(mk, "%04d-%02d", &y, &m)
+					y, m := parseMonthKey(mk)
 					declared, err := h.DB.GetUserTotalDeclaredForMonth(s.User.ID, y, m)
 					if err == nil {
 						totalProjectDeclared += declared
@@ -735,8 +740,7 @@ func (h *ActivityHandler) computeProjectActivityForMonths(stats []models.UserSta
 		var userDeclared float64
 		hasData := false
 		for _, mk := range monthKeys {
-			var y, m int
-			fmt.Sscanf(mk, "%04d-%02d", &y, &m)
+			y, m := parseMonthKey(mk)
 			declared, err := h.DB.GetUserTotalDeclaredForMonth(s.User.ID, y, m)
 			if err == nil {
 				userDeclared += declared
@@ -781,8 +785,7 @@ func (h *ActivityHandler) computeManualProjectActivityForMonths(stats []models.U
 		var userDeclared float64
 		hasData := false
 		for _, mk := range monthKeys {
-			var y, m int
-			fmt.Sscanf(mk, "%04d-%02d", &y, &m)
+			y, m := parseMonthKey(mk)
 			weights, err := h.DB.GetUserBillableDatesForMonth(s.User.ID, y, m)
 			if err != nil {
 				continue
