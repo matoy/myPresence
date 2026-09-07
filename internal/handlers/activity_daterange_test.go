@@ -76,8 +76,8 @@ func TestParseActivityDateRange(t *testing.T) {
 
 	// 3. Inverted day range (auto-swapped)
 	s, e, mk, isR = parseActivityDateRange("2026-03-20", "2026-03-05")
-	if !isR || s != "2026-03-05" || e != "2026-03-20" {
-		t.Errorf("unexpected for inverted day range: isR=%v, s=%s, e=%s", isR, s, e)
+	if !isR || s != "2026-03-05" || e != "2026-03-20" || len(mk) != 1 || mk[0] != "2026-03" {
+		t.Errorf("unexpected for inverted day range: isR=%v, s=%s, e=%s, mk=%v", isR, s, e, mk)
 	}
 
 	// 4. Single day provided
@@ -106,7 +106,7 @@ func TestParseActivityDateRange(t *testing.T) {
 
 	// 8. Both empty
 	s, e, mk, isR = parseActivityDateRange("", "")
-	if isR {
+	if isR || s != "" || e != "" || len(mk) != 0 {
 		t.Errorf("expected false when both empty")
 	}
 }

@@ -580,7 +580,6 @@ func parseActivityDateRange(dateFrom, dateTo string) (startDate, endDate string,
 	}
 	startDate = startT.Format("2006-01-02")
 	endDate = endT.Format("2006-01-02")
-	isRange = true
 
 	cur := time.Date(startT.Year(), startT.Month(), 1, 0, 0, 0, 0, time.UTC)
 	endMonth := time.Date(endT.Year(), endT.Month(), 1, 0, 0, 0, 0, time.UTC)
