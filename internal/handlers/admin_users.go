@@ -125,6 +125,17 @@ func (h *UsersAdminHandler) SetPassword(w http.ResponseWriter, r *http.Request) 
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "user", id, "set_password", "")
 	}
+
+	// Invalidate active sessions for the reset account.
+	// If the admin is resetting their own account, preserve the current session cookie.
+	var exceptToken string
+	if currentUser != nil && currentUser.ID == id {
+		if cookie, err := r.Cookie("session"); err == nil {
+			exceptToken = cookie.Value
+		}
+	}
+	h.DB.DeleteUserSessions(id, exceptToken)
+
 	metrics.AdminOpsTotal.WithLabelValues("user", "set_password", "success").Inc()
 	jsonOK(w, map[string]string{"status": "ok"})
 }

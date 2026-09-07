@@ -323,6 +323,14 @@ func TestSetPassword_Success(t *testing.T) {
 	h := &UsersAdminHandler{DB: d, Render: noRender}
 
 	uid, _ := d.CreateLocalUser("setpwd@test.com", "SetPwd", "oldpass1")
+	sessToken, err := d.CreateSession(uid)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	if _, err := d.GetSessionUser(sessToken); err != nil {
+		t.Fatalf("expected session to be valid before password reset: %v", err)
+	}
+
 	bodyBytes, _ := json.Marshal(map[string]interface{}{
 		"password": "newpass123",
 	})
@@ -333,6 +341,53 @@ func TestSetPassword_Success(t *testing.T) {
 	middleware.Auth(d, http.HandlerFunc(h.SetPassword)).ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Active session for the reset user must be revoked
+	if _, err := d.GetSessionUser(sessToken); err == nil {
+		t.Fatalf("expected session for user %d to be deleted after admin SetPassword", uid)
+	}
+}
+
+func TestSetPassword_AdminResetOwnPassword_PreservesCurrentSession(t *testing.T) {
+	d := newExtraTestDB(t)
+	d.SetBcryptCost(4)
+	h := &UsersAdminHandler{DB: d, Render: noRender}
+
+	adminID, _ := d.CreateLocalUser("admin_self@test.com", "Admin Self", "adminpass1")
+	_ = d.UpdateUserRoles(adminID, "global")
+
+	sessToken, err := d.CreateSession(adminID)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+	otherSessToken, err := d.CreateSession(adminID)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	bodyBytes, _ := json.Marshal(map[string]interface{}{
+		"password": "newadminpass123",
+	})
+	req := httptest.NewRequest(http.MethodPut, "/api/admin/users/"+strconvI64(adminID)+"/password", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session", Value: sessToken})
+	req.SetPathValue("id", strconvI64(adminID))
+
+	w := httptest.NewRecorder()
+	w.Body = new(bytes.Buffer)
+	middleware.Auth(d, http.HandlerFunc(h.SetPassword)).ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	// Current session should be preserved
+	if _, err := d.GetSessionUser(sessToken); err != nil {
+		t.Fatalf("expected current admin session to be preserved: %v", err)
+	}
+	// Other session on another device should be revoked
+	if _, err := d.GetSessionUser(otherSessToken); err == nil {
+		t.Fatalf("expected other admin session to be revoked")
 	}
 }
 
