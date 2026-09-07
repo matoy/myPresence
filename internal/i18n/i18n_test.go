@@ -236,6 +236,10 @@ func TestNotificationKeys_AllLanguages(t *testing.T) {
 		"notifications.acknowledge",
 		"notifications.team_added_title",
 		"notifications.team_added_msg",
+		"notifications.reminder_presence_title",
+		"notifications.reminder_presence_msg",
+		"notifications.reminder_activity_title",
+		"notifications.reminder_activity_msg",
 		"notifications.delete_confirm_title",
 		"notifications.delete_confirm_desc",
 		"notifications.delete_success",
@@ -263,6 +267,31 @@ func TestNotificationKeys_AllLanguages(t *testing.T) {
 			val, ok := m[key]
 			if !ok || val == "" {
 				t.Errorf("lang %q is missing required notification key %q", lang, key)
+			}
+		}
+	}
+}
+
+func TestTeamReminderKeys_AllLanguages(t *testing.T) {
+	requiredKeys := []string{
+		"teams.reminders_section",
+		"teams.remind_presence",
+		"teams.presence_reminder_days",
+		"teams.remind_activity",
+		"teams.activity_reminder_days",
+		"teams.trigger_reminders",
+		"teams.trigger_reminders_tooltip",
+		"teams.trigger_reminders_confirm",
+		"teams.trigger_reminders_result",
+	}
+
+	langs := []string{"en", "fr", "de", "es", "it"}
+	for _, lang := range langs {
+		m := T(lang)
+		for _, key := range requiredKeys {
+			val, ok := m[key]
+			if !ok || val == "" {
+				t.Errorf("lang %q is missing required team reminder key %q", lang, key)
 			}
 		}
 	}

@@ -259,6 +259,16 @@
                                     <span>👥</span>
                                     <span>{{index $.T "notifications.team_added_title"}}</span>
                                 </span>
+                                {{else if eq .Type "reminder_presence"}}
+                                <span class="inline-flex items-center gap-1 font-medium text-amber-700">
+                                    <span>🔔</span>
+                                    <span>{{index $.T "notifications.reminder_presence_title"}}</span>
+                                </span>
+                                {{else if eq .Type "reminder_activity"}}
+                                <span class="inline-flex items-center gap-1 font-medium text-purple-700">
+                                    <span>📊</span>
+                                    <span>{{index $.T "notifications.reminder_activity_title"}}</span>
+                                </span>
                                 {{else}}
                                 <span class="inline-flex items-center gap-1 text-gray-700">
                                     <span>🔔</span>

@@ -523,12 +523,17 @@ FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 	d.core.Exec(`UPDATE users SET role = REPLACE(role, 'cra_viewer', 'activity_viewer') WHERE role LIKE '%cra_viewer%'`)                                         //nolint:errcheck
 	d.core.Exec(`UPDATE users SET role = REPLACE(role, 'projects_admin', 'projects_manager') WHERE role LIKE '%projects_admin%'`)                                //nolint:errcheck
 	d.core.Exec(dl.rebind(dl.modifyColumnType("users", "role", dl.varcharType(128), "VARCHAR(64)")))                                                             //nolint:errcheck
+	d.core.Exec(dl.rebind(dl.addColumnIfNotExists("users", "language", dl.varcharType(10)+" NOT NULL DEFAULT ''")))                                              //nolint:errcheck
 	d.core.Exec(dl.rebind(dl.addColumnIfNotExists("user_teams", "left_at", dl.varcharType(10)+" DEFAULT NULL")))                                                 //nolint:errcheck
 	d.core.Exec(dl.rebind(dl.addColumnIfNotExists("teams", "jira_space_key", nameType+" DEFAULT ''")))                                                           //nolint:errcheck
 	d.core.Exec(dl.rebind(dl.addColumnIfNotExists("teams", "timesheets_managed_manually", fmt.Sprintf("%s NOT NULL DEFAULT %s", bool_, dl.boolDefault(false))))) //nolint:errcheck
 	d.core.Exec(dl.rebind(dl.addColumnIfNotExists("teams", "require_activity_comment", fmt.Sprintf("%s NOT NULL DEFAULT %s", bool_, dl.boolDefault(false)))))    //nolint:errcheck
 	d.core.Exec(dl.rebind(dl.addColumnIfNotExists("teams", "domain_id", "BIGINT NOT NULL DEFAULT 0")))                                                           //nolint:errcheck
 	d.core.Exec(dl.rebind(dl.addColumnIfNotExists("teams", "country_codes", dl.varcharType(255)+" NOT NULL DEFAULT ''")))                                        //nolint:errcheck
+	d.core.Exec(dl.rebind(dl.addColumnIfNotExists("teams", "remind_presence", fmt.Sprintf("%s NOT NULL DEFAULT %s", bool_, dl.boolDefault(false)))))          //nolint:errcheck
+	d.core.Exec(dl.rebind(dl.addColumnIfNotExists("teams", "presence_reminder_days", "INT NOT NULL DEFAULT 0")))                                                //nolint:errcheck
+	d.core.Exec(dl.rebind(dl.addColumnIfNotExists("teams", "remind_activity", fmt.Sprintf("%s NOT NULL DEFAULT %s", bool_, dl.boolDefault(false)))))          //nolint:errcheck
+	d.core.Exec(dl.rebind(dl.addColumnIfNotExists("teams", "activity_reminder_days", "INT NOT NULL DEFAULT 0")))                                                //nolint:errcheck
 
 	// Migrate legacy team_leader role users into team_leaders table and clean up users.role
 	if rows, err := d.core.Query(`SELECT u.id, ut.team_id FROM users u JOIN user_teams ut ON u.id = ut.user_id WHERE u.role LIKE '%team_leader%'`); err == nil {
@@ -1222,9 +1227,9 @@ func (d *DB) CleanExpiredResetTokens() {
 func (d *DB) GetUserByEmail(email string) (*models.User, error) {
 	var u models.User
 	err := d.core.QueryRow(
-		"SELECT id, email, name, role, COALESCE(password_hash,''), disabled, created_at, COALESCE(site_id, 0) FROM users WHERE email = ?",
+		"SELECT id, email, name, role, COALESCE(password_hash,''), disabled, created_at, COALESCE(site_id, 0), COALESCE(language, '') FROM users WHERE email = ?",
 		email,
-	).Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt, &u.SiteID)
+	).Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt, &u.SiteID, &u.Language)
 	if err != nil {
 		return nil, err
 	}
@@ -1241,9 +1246,9 @@ func (d *DB) GetUserByEmail(email string) (*models.User, error) {
 func (d *DB) GetUserByID(id int64) (*models.User, error) {
 	var u models.User
 	err := d.core.QueryRow(
-		"SELECT id, email, name, role, COALESCE(password_hash,''), disabled, created_at, COALESCE(site_id, 0) FROM users WHERE id = ?",
+		"SELECT id, email, name, role, COALESCE(password_hash,''), disabled, created_at, COALESCE(site_id, 0), COALESCE(language, '') FROM users WHERE id = ?",
 		id,
-	).Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt, &u.SiteID)
+	).Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt, &u.SiteID, &u.Language)
 	if err != nil {
 		return nil, err
 	}
@@ -1275,7 +1280,7 @@ func (d *DB) UpsertUser(email, name string) (*models.User, error) {
 }
 
 func (d *DB) ListUsers() ([]models.User, error) {
-	rows, err := d.core.Query("SELECT id, email, name, role, COALESCE(password_hash,''), disabled, created_at, COALESCE(site_id, 0) FROM users ORDER BY name")
+	rows, err := d.core.Query("SELECT id, email, name, role, COALESCE(password_hash,''), disabled, created_at, COALESCE(site_id, 0), COALESCE(language, '') FROM users ORDER BY name")
 	if err != nil {
 		return nil, err
 	}
@@ -1284,7 +1289,7 @@ func (d *DB) ListUsers() ([]models.User, error) {
 	var users []models.User
 	for rows.Next() {
 		var u models.User
-		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt, &u.SiteID); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt, &u.SiteID, &u.Language); err != nil {
 			return nil, err
 		}
 		u.IsLocal = u.PasswordHash != ""
@@ -1302,9 +1307,22 @@ func (d *DB) UpdateUserSite(userID, siteID int64) error {
 	return err
 }
 
+// UpdateUserLanguage updates a user's language preference.
+func (d *DB) UpdateUserLanguage(userID int64, lang string) error {
+	_, err := d.core.Exec("UPDATE users SET language = ? WHERE id = ?", lang, userID)
+	return err
+}
+
+// GetUserLanguage returns a user's preferred language, or empty string if unset.
+func (d *DB) GetUserLanguage(userID int64) string {
+	var lang string
+	_ = d.core.QueryRow("SELECT COALESCE(language, '') FROM users WHERE id = ?", userID).Scan(&lang)
+	return lang
+}
+
 // GetUsersBySite returns all users assigned to a site.
 func (d *DB) GetUsersBySite(siteID int64) ([]models.User, error) {
-	rows, err := d.core.Query(d.dialect.rebind("SELECT id, email, name, role, COALESCE(password_hash,''), disabled, created_at, COALESCE(site_id, 0) FROM users WHERE site_id = ? ORDER BY name"), siteID)
+	rows, err := d.core.Query(d.dialect.rebind("SELECT id, email, name, role, COALESCE(password_hash,''), disabled, created_at, COALESCE(site_id, 0), COALESCE(language, '') FROM users WHERE site_id = ? ORDER BY name"), siteID)
 	if err != nil {
 		return nil, err
 	}
@@ -1313,7 +1331,7 @@ func (d *DB) GetUsersBySite(siteID int64) ([]models.User, error) {
 	var users []models.User
 	for rows.Next() {
 		var u models.User
-		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt, &u.SiteID); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt, &u.SiteID, &u.Language); err != nil {
 			return nil, err
 		}
 		u.IsLocal = u.PasswordHash != ""
@@ -1457,7 +1475,7 @@ func sanitizeCountryCodes(codes string) string {
 // --- Team management ---
 
 func (d *DB) ListTeams() ([]models.Team, error) {
-	rows, err := d.core.Query("SELECT id, name, COALESCE(jira_space_key,''), timesheets_managed_manually, COALESCE(require_activity_comment, false), domain_id, COALESCE(country_codes, ''), created_at FROM teams ORDER BY name")
+	rows, err := d.core.Query("SELECT id, name, COALESCE(jira_space_key,''), timesheets_managed_manually, COALESCE(require_activity_comment, false), domain_id, COALESCE(country_codes, ''), COALESCE(remind_presence, false), COALESCE(presence_reminder_days, 0), COALESCE(remind_activity, false), COALESCE(activity_reminder_days, 0), created_at FROM teams ORDER BY name")
 	if err != nil {
 		return nil, err
 	}
@@ -1466,7 +1484,7 @@ func (d *DB) ListTeams() ([]models.Team, error) {
 	var teams []models.Team
 	for rows.Next() {
 		var t models.Team
-		if err := rows.Scan(&t.ID, &t.Name, &t.JiraSpaceKey, &t.TimesheetsManagedManually, &t.RequireActivityComment, &t.DomainID, &t.CountryCodes, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.JiraSpaceKey, &t.TimesheetsManagedManually, &t.RequireActivityComment, &t.DomainID, &t.CountryCodes, &t.RemindPresence, &t.PresenceReminderDays, &t.RemindActivity, &t.ActivityReminderDays, &t.CreatedAt); err != nil {
 			return nil, err
 		}
 		teams = append(teams, t)
@@ -1478,9 +1496,9 @@ func (d *DB) ListTeams() ([]models.Team, error) {
 func (d *DB) GetTeam(id int64) (*models.Team, error) {
 	var t models.Team
 	err := d.core.QueryRow(
-		"SELECT id, name, COALESCE(jira_space_key,''), timesheets_managed_manually, COALESCE(require_activity_comment, false), domain_id, COALESCE(country_codes, ''), created_at FROM teams WHERE id = ?",
+		"SELECT id, name, COALESCE(jira_space_key,''), timesheets_managed_manually, COALESCE(require_activity_comment, false), domain_id, COALESCE(country_codes, ''), COALESCE(remind_presence, false), COALESCE(presence_reminder_days, 0), COALESCE(remind_activity, false), COALESCE(activity_reminder_days, 0), created_at FROM teams WHERE id = ?",
 		id,
-	).Scan(&t.ID, &t.Name, &t.JiraSpaceKey, &t.TimesheetsManagedManually, &t.RequireActivityComment, &t.DomainID, &t.CountryCodes, &t.CreatedAt)
+	).Scan(&t.ID, &t.Name, &t.JiraSpaceKey, &t.TimesheetsManagedManually, &t.RequireActivityComment, &t.DomainID, &t.CountryCodes, &t.RemindPresence, &t.PresenceReminderDays, &t.RemindActivity, &t.ActivityReminderDays, &t.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -1524,6 +1542,15 @@ func (d *DB) UpdateTeamDomain(teamID, domainID int64) error {
 	return err
 }
 
+// UpdateTeamReminders updates reminder settings for a team.
+func (d *DB) UpdateTeamReminders(id int64, remindPresence bool, presenceDays int, remindActivity bool, activityDays int) error {
+	_, err := d.core.Exec(
+		"UPDATE teams SET remind_presence = ?, presence_reminder_days = ?, remind_activity = ?, activity_reminder_days = ? WHERE id = ?",
+		remindPresence, presenceDays, remindActivity, activityDays, id,
+	)
+	return err
+}
+
 func (d *DB) DeleteTeam(id int64) error {
 	_, err := d.core.Exec("DELETE FROM teams WHERE id = ?", id)
 	return err
@@ -1532,7 +1559,7 @@ func (d *DB) DeleteTeam(id int64) error {
 // GetTeamMembers returns currently active members of a team (left_at IS NULL).
 func (d *DB) GetTeamMembers(teamID int64) ([]models.User, error) {
 	rows, err := d.core.Query(`
-SELECT u.id, u.email, u.name, u.role, COALESCE(u.password_hash,''), u.disabled, u.created_at, COALESCE(u.site_id, 0)
+SELECT u.id, u.email, u.name, u.role, COALESCE(u.password_hash,''), u.disabled, u.created_at, COALESCE(u.site_id, 0), COALESCE(u.language, '')
 FROM users u
 JOIN user_teams ut ON u.id = ut.user_id
 WHERE ut.team_id = ? AND ut.left_at IS NULL
@@ -1546,7 +1573,7 @@ ORDER BY u.name
 	var users []models.User
 	for rows.Next() {
 		var u models.User
-		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt, &u.SiteID); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt, &u.SiteID, &u.Language); err != nil {
 			return nil, err
 		}
 		u.IsLocal = u.PasswordHash != ""
@@ -1561,7 +1588,7 @@ ORDER BY u.name
 // GetAllTeamMembers returns all members of a team (active and departed), active first.
 func (d *DB) GetAllTeamMembers(teamID int64) ([]models.TeamMember, error) {
 	rows, err := d.core.Query(`
-SELECT u.id, u.email, u.name, u.role, COALESCE(u.password_hash,''), u.disabled, u.created_at, COALESCE(u.site_id, 0), ut.left_at
+SELECT u.id, u.email, u.name, u.role, COALESCE(u.password_hash,''), u.disabled, u.created_at, COALESCE(u.site_id, 0), COALESCE(u.language, ''), ut.left_at
 FROM users u
 JOIN user_teams ut ON u.id = ut.user_id
 WHERE ut.team_id = ?
@@ -1575,7 +1602,7 @@ ORDER BY CASE WHEN ut.left_at IS NULL THEN 0 ELSE 1 END, u.name
 	var members []models.TeamMember
 	for rows.Next() {
 		var m models.TeamMember
-		if err := rows.Scan(&m.ID, &m.Email, &m.Name, &m.Roles, &m.PasswordHash, &m.Disabled, &m.CreatedAt, &m.SiteID, &m.LeftAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.Email, &m.Name, &m.Roles, &m.PasswordHash, &m.Disabled, &m.CreatedAt, &m.SiteID, &m.Language, &m.LeftAt); err != nil {
 			return nil, err
 		}
 		m.IsLocal = m.PasswordHash != ""
@@ -1591,7 +1618,7 @@ ORDER BY CASE WHEN ut.left_at IS NULL THEN 0 ELSE 1 END, u.name
 // (left_at IS NULL, meaning still active, or left_at >= startDate, meaning they left during or after the period).
 func (d *DB) GetTeamMembersAt(teamID int64, startDate string) ([]models.User, error) {
 	rows, err := d.core.Query(`
-SELECT u.id, u.email, u.name, u.role, COALESCE(u.password_hash,''), u.disabled, u.created_at, COALESCE(u.site_id, 0)
+SELECT u.id, u.email, u.name, u.role, COALESCE(u.password_hash,''), u.disabled, u.created_at, COALESCE(u.site_id, 0), COALESCE(u.language, '')
 FROM users u
 JOIN user_teams ut ON u.id = ut.user_id
 WHERE ut.team_id = ? AND (ut.left_at IS NULL OR ut.left_at >= ?)
@@ -1605,7 +1632,7 @@ ORDER BY u.name
 	var users []models.User
 	for rows.Next() {
 		var u models.User
-		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt, &u.SiteID); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt, &u.SiteID, &u.Language); err != nil {
 			return nil, err
 		}
 		u.IsLocal = u.PasswordHash != ""
@@ -1642,7 +1669,7 @@ func (d *DB) RemoveTeamMember(teamID, userID int64) error {
 
 func (d *DB) GetUserTeams(userID int64) ([]models.Team, error) {
 	rows, err := d.core.Query(`
-SELECT t.id, t.name, COALESCE(t.jira_space_key,''), t.timesheets_managed_manually, COALESCE(t.require_activity_comment, false), t.domain_id, COALESCE(t.country_codes, ''), t.created_at
+SELECT t.id, t.name, COALESCE(t.jira_space_key,''), t.timesheets_managed_manually, COALESCE(t.require_activity_comment, false), t.domain_id, COALESCE(t.country_codes, ''), COALESCE(t.remind_presence, false), COALESCE(t.presence_reminder_days, 0), COALESCE(t.remind_activity, false), COALESCE(t.activity_reminder_days, 0), t.created_at
 FROM teams t
 JOIN user_teams ut ON t.id = ut.team_id
 WHERE ut.user_id = ? AND ut.left_at IS NULL
@@ -1656,7 +1683,7 @@ ORDER BY t.name
 	var teams []models.Team
 	for rows.Next() {
 		var t models.Team
-		if err := rows.Scan(&t.ID, &t.Name, &t.JiraSpaceKey, &t.TimesheetsManagedManually, &t.RequireActivityComment, &t.DomainID, &t.CountryCodes, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.JiraSpaceKey, &t.TimesheetsManagedManually, &t.RequireActivityComment, &t.DomainID, &t.CountryCodes, &t.RemindPresence, &t.PresenceReminderDays, &t.RemindActivity, &t.ActivityReminderDays, &t.CreatedAt); err != nil {
 			return nil, err
 		}
 		teams = append(teams, t)
@@ -1687,7 +1714,7 @@ func (d *DB) GetTeamLeaderIDs(teamID int64) ([]int64, error) {
 // ListTeamLeaders returns the users designated as leaders of a team.
 func (d *DB) ListTeamLeaders(teamID int64) ([]models.User, error) {
 	rows, err := d.core.Query(`
-SELECT u.id, u.email, u.name, u.role, COALESCE(u.password_hash,''), u.disabled, u.created_at, COALESCE(u.site_id, 0)
+SELECT u.id, u.email, u.name, u.role, COALESCE(u.password_hash,''), u.disabled, u.created_at, COALESCE(u.site_id, 0), COALESCE(u.language, '')
 FROM users u
 JOIN team_leaders tl ON u.id = tl.user_id
 WHERE tl.team_id = ?
@@ -1701,7 +1728,7 @@ ORDER BY u.name
 	var users []models.User
 	for rows.Next() {
 		var u models.User
-		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt, &u.SiteID); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Roles, &u.PasswordHash, &u.Disabled, &u.CreatedAt, &u.SiteID, &u.Language); err != nil {
 			return nil, err
 		}
 		u.IsLocal = u.PasswordHash != ""
@@ -1777,7 +1804,7 @@ func (d *DB) GetLedTeamIDs(userID int64) ([]int64, error) {
 // GetLedTeams returns the full Team objects for all teams where userID is a designated leader.
 func (d *DB) GetLedTeams(userID int64) ([]models.Team, error) {
 	rows, err := d.core.Query(`
-SELECT t.id, t.name, COALESCE(t.jira_space_key,''), t.timesheets_managed_manually, COALESCE(t.require_activity_comment, false), t.domain_id, COALESCE(t.country_codes, ''), t.created_at
+SELECT t.id, t.name, COALESCE(t.jira_space_key,''), t.timesheets_managed_manually, COALESCE(t.require_activity_comment, false), t.domain_id, COALESCE(t.country_codes, ''), COALESCE(t.remind_presence, false), COALESCE(t.presence_reminder_days, 0), COALESCE(t.remind_activity, false), COALESCE(t.activity_reminder_days, 0), t.created_at
 FROM teams t
 JOIN team_leaders tl ON t.id = tl.team_id
 WHERE tl.user_id = ?
@@ -1791,7 +1818,7 @@ ORDER BY t.name
 	var teams []models.Team
 	for rows.Next() {
 		var t models.Team
-		if err := rows.Scan(&t.ID, &t.Name, &t.JiraSpaceKey, &t.TimesheetsManagedManually, &t.RequireActivityComment, &t.DomainID, &t.CountryCodes, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Name, &t.JiraSpaceKey, &t.TimesheetsManagedManually, &t.RequireActivityComment, &t.DomainID, &t.CountryCodes, &t.RemindPresence, &t.PresenceReminderDays, &t.RemindActivity, &t.ActivityReminderDays, &t.CreatedAt); err != nil {
 			return nil, err
 		}
 		teams = append(teams, t)

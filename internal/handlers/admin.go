@@ -16,11 +16,17 @@ import (
 	"github.com/matoy/mypresence/internal/models"
 )
 
+// ReminderRunner runs automated reminder checks for teams.
+type ReminderRunner interface {
+	CheckAndSendReminders(now time.Time, teamIDFilter int64, force bool) (presenceSent, activitySent int, err error)
+}
+
 // AdminHandler handles all admin pages and API endpoints.
 type AdminHandler struct {
-	DB     *db.DB
-	Config *config.Config
-	Render func(w http.ResponseWriter, r *http.Request, page string, data interface{})
+	DB               *db.DB
+	Config           *config.Config
+	Render           func(w http.ResponseWriter, r *http.Request, page string, data interface{})
+	RemindersService ReminderRunner
 }
 
 // --- Team management ---
@@ -82,6 +88,7 @@ func (h *AdminHandler) TeamsPage(w http.ResponseWriter, r *http.Request) {
 		"Domains":        domains,
 		"Countries":      models.AllCountries,
 		"CanManageTeams": canManageTeams,
+		"IsGlobalAdmin":  currentUser != nil && currentUser.HasRole(models.RoleGlobal),
 		"JiraEnabled":    h.Config != nil && h.Config.JiraEnabled,
 	})
 }
@@ -111,6 +118,10 @@ func (h *AdminHandler) CreateTeam(w http.ResponseWriter, r *http.Request) {
 		RequireActivityComment    bool   `json:"require_activity_comment"`
 		DomainID                  int64  `json:"domain_id"`
 		CountryCodes              string `json:"country_codes"`
+		RemindPresence            bool   `json:"remind_presence"`
+		PresenceReminderDays      int    `json:"presence_reminder_days"`
+		RemindActivity            bool   `json:"remind_activity"`
+		ActivityReminderDays      int    `json:"activity_reminder_days"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Name) == "" {
 		metrics.AdminOpsTotal.WithLabelValues("team", "create", "failure").Inc()
@@ -125,6 +136,9 @@ func (h *AdminHandler) CreateTeam(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.DomainID > 0 {
 		h.DB.UpdateTeamDomain(id, req.DomainID) //nolint:errcheck
+	}
+	if req.RemindPresence || req.RemindActivity {
+		h.DB.UpdateTeamReminders(id, req.RemindPresence, req.PresenceReminderDays, req.RemindActivity, req.ActivityReminderDays) //nolint:errcheck
 	}
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "team", id, "create", req.Name)
@@ -153,7 +167,7 @@ func (h *AdminHandler) DeleteTeam(w http.ResponseWriter, r *http.Request) {
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 
-// UpdateTeam renames a team.
+// UpdateTeam renames a team and updates its settings.
 func (h *AdminHandler) UpdateTeam(w http.ResponseWriter, r *http.Request) {
 	currentUser := middleware.GetUser(r)
 	if currentUser != nil && !currentUser.HasAnyRole(models.RoleTeamManager, models.RoleGlobal) {
@@ -169,16 +183,49 @@ func (h *AdminHandler) UpdateTeam(w http.ResponseWriter, r *http.Request) {
 		RequireActivityComment    bool   `json:"require_activity_comment"`
 		DomainID                  int64  `json:"domain_id"`
 		CountryCodes              string `json:"country_codes"`
+		RemindPresence            bool   `json:"remind_presence"`
+		PresenceReminderDays      int    `json:"presence_reminder_days"`
+		RemindActivity            bool   `json:"remind_activity"`
+		ActivityReminderDays      int    `json:"activity_reminder_days"`
 	}
 	json.NewDecoder(r.Body).Decode(&req)                                                                                                                   //nolint:errcheck
 	h.DB.UpdateTeamDetails(id, req.Name, strings.TrimSpace(req.JiraSpaceKey), req.TimesheetsManagedManually, req.RequireActivityComment, req.CountryCodes) //nolint:errcheck
 	h.DB.UpdateTeamDomain(id, req.DomainID)                                                                                                                //nolint:errcheck
+	h.DB.UpdateTeamReminders(id, req.RemindPresence, req.PresenceReminderDays, req.RemindActivity, req.ActivityReminderDays)                                 //nolint:errcheck
 	if currentUser != nil {
 		h.DB.LogAdminAction(currentUser.ID, "team", id, "update", req.Name)
 		slog.Info("admin.team.update", "actor", currentUser.Email, "team", req.Name, "team_id", id)
 	}
 	metrics.AdminOpsTotal.WithLabelValues("team", "update", "success").Inc()
 	jsonOK(w, map[string]string{"status": "ok"})
+}
+
+// TriggerTeamReminders triggers an immediate reminder evaluation for a team (Global Admin only).
+func (h *AdminHandler) TriggerTeamReminders(w http.ResponseWriter, r *http.Request) {
+	currentUser := middleware.GetUser(r)
+	if currentUser == nil || !currentUser.HasRole(models.RoleGlobal) {
+		jsonError(w, "Access denied", http.StatusForbidden)
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || id <= 0 {
+		jsonError(w, "Invalid team ID", http.StatusBadRequest)
+		return
+	}
+	if h.RemindersService == nil {
+		jsonError(w, "Reminders service unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	presenceSent, activitySent, err := h.RemindersService.CheckAndSendReminders(time.Now(), id, true)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	jsonOK(w, map[string]interface{}{
+		"status":        "ok",
+		"presence_sent": presenceSent,
+		"activity_sent": activitySent,
+	})
 }
 
 // AddTeamMember adds a user to a team.

@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"strings"
 	"time"
 )
@@ -44,6 +45,7 @@ type User struct {
 	SiteID          int64     `json:"site_id"`
 	SiteName        string    `json:"site_name,omitempty"`
 	SiteCountryCode string    `json:"site_country_code,omitempty"`
+	Language        string    `json:"language,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
 }
 
@@ -221,6 +223,10 @@ type Team struct {
 	RequireActivityComment    bool      `json:"require_activity_comment"`
 	DomainID                  int64     `json:"domain_id"`
 	CountryCodes              string    `json:"country_codes"` // comma-separated ISO codes e.g. "FR,MA,US"
+	RemindPresence            bool      `json:"remind_presence"`
+	PresenceReminderDays      int       `json:"presence_reminder_days"`
+	RemindActivity            bool      `json:"remind_activity"`
+	ActivityReminderDays      int       `json:"activity_reminder_days"`
 	CreatedAt                 time.Time `json:"created_at"`
 }
 
@@ -523,6 +529,60 @@ type Notification struct {
 	Acknowledged   bool       `json:"acknowledged"`
 	AcknowledgedAt *time.Time `json:"acknowledged_at"`
 	CreatedAt      time.Time  `json:"created_at"`
+}
+
+// extractFirstPositiveInt extracts the first integer found in the string, or returns defaultVal.
+func extractFirstPositiveInt(s string, defaultVal int) int {
+	var num int
+	inNum := false
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			num = num*10 + int(r-'0')
+			inNum = true
+		} else if inNum {
+			break
+		}
+	}
+	if !inNum || num <= 0 {
+		return defaultVal
+	}
+	return num
+}
+
+// Localize translates the notification title and message if localized templates are available.
+func (n *Notification) Localize(tr map[string]string) {
+	if tr == nil {
+		return
+	}
+	switch n.Type {
+	case "reminder_presence":
+		if t, ok := tr["notifications.reminder_presence_title"]; ok && t != "" {
+			n.Title = t
+		}
+		if tpl, ok := tr["notifications.reminder_presence_msg"]; ok && tpl != "" {
+			days := extractFirstPositiveInt(n.Message, 1)
+			n.Message = fmt.Sprintf(tpl, days)
+		}
+	case "reminder_activity":
+		if t, ok := tr["notifications.reminder_activity_title"]; ok && t != "" {
+			n.Title = t
+		}
+		if tpl, ok := tr["notifications.reminder_activity_msg"]; ok && tpl != "" {
+			days := extractFirstPositiveInt(n.Message, 1)
+			n.Message = fmt.Sprintf(tpl, days)
+		}
+	case "team_added":
+		if t, ok := tr["notifications.team_added_title"]; ok && t != "" {
+			n.Title = t
+		}
+		if tpl, ok := tr["notifications.team_added_msg"]; ok && tpl != "" && n.Link != "" {
+			actor := n.ActorName
+			if actor == "" {
+				actor = "Admin"
+			}
+			n.Message = fmt.Sprintf(tpl, n.Link, actor)
+		}
+	}
 }
 
 // PageData is the common data passed to all templates.

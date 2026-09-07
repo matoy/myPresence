@@ -167,6 +167,10 @@ func newRenderPage(cfg *config.Config, database *db.DB, templates map[string]*te
 	return func(w http.ResponseWriter, r *http.Request, page string, data interface{}) {
 		user := middleware.GetUser(r)
 		lang := i18n.LangFromRequest(r, cfg.DefaultLang)
+		if user != nil && database != nil && user.Language != lang {
+			_ = database.UpdateUserLanguage(user.ID, lang)
+			user.Language = lang
+		}
 
 		// Check if a logo file exists in the data directory.
 		logoExists := false
@@ -249,6 +253,10 @@ func newRenderPage(cfg *config.Config, database *db.DB, templates map[string]*te
 				pd.ActiveNewsMessages = activeNews
 			}
 			if unreadNotifs, err := database.GetUnreadNotifications(user.ID); err == nil {
+				tr := i18n.T(lang)
+				for i := range unreadNotifs {
+					unreadNotifs[i].Localize(tr)
+				}
 				pd.Notifications = unreadNotifs
 			}
 		}
@@ -347,9 +355,8 @@ func metricsHandler(metricsToken string) http.HandlerFunc {
 }
 
 // langSwitcherHandler returns a handler that sets the "lang" cookie to a
-// supported language code and redirects the user back to the same page
-// (same-origin only — open redirect is prevented).
-func langSwitcherHandler(defaultLang string) http.HandlerFunc {
+// supported language code, persists it to the user profile if authenticated, and redirects back.
+func langSwitcherHandler(defaultLang string, database ...*db.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		lang := r.FormValue("lang")
 		valid := false
@@ -361,6 +368,11 @@ func langSwitcherHandler(defaultLang string) http.HandlerFunc {
 		}
 		if !valid {
 			lang = defaultLang
+		}
+		if len(database) > 0 && database[0] != nil {
+			if u := middleware.GetUser(r); u != nil {
+				_ = database[0].UpdateUserLanguage(u.ID, lang)
+			}
 		}
 		http.SetCookie(w, &http.Cookie{
 			Name:     "lang",
@@ -383,3 +395,4 @@ func langSwitcherHandler(defaultLang string) http.HandlerFunc {
 		http.Redirect(w, r, target, http.StatusSeeOther)
 	}
 }
+

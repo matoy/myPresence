@@ -267,3 +267,70 @@ func TestBasicPlusElevatedUserIsDetected(t *testing.T) {
 		t.Error("user with basic+team_manager should be detected as elevated")
 	}
 }
+
+func TestNotification_Localize(t *testing.T) {
+	tr := map[string]string{
+		"notifications.reminder_presence_title": "Rappel présence FR",
+		"notifications.reminder_presence_msg":   "Déclarer présence pour %d jours ouvrés.",
+		"notifications.reminder_activity_title": "Rappel activité FR",
+		"notifications.reminder_activity_msg":   "Déclarer activités pour %d jours.",
+		"notifications.team_added_title":        "Ajout équipe FR",
+		"notifications.team_added_msg":          "Ajouté à %s par %s.",
+	}
+
+	t.Run("nil tr does nothing", func(t *testing.T) {
+		n := &Notification{Type: "reminder_presence", Title: "Old", Message: "Old msg"}
+		n.Localize(nil)
+		if n.Title != "Old" || n.Message != "Old msg" {
+			t.Errorf("expected unchanged notification")
+		}
+	})
+
+	t.Run("reminder_presence localization extracts days", func(t *testing.T) {
+		n := &Notification{
+			Type:    "reminder_presence",
+			Title:   "Presence declaration reminder",
+			Message: "Please declare your presence for the next 5 working day(s).",
+		}
+		n.Localize(tr)
+		if n.Title != "Rappel présence FR" {
+			t.Errorf("expected localized title, got %q", n.Title)
+		}
+		if n.Message != "Déclarer présence pour 5 jours ouvrés." {
+			t.Errorf("expected localized message with 5 days, got %q", n.Message)
+		}
+	})
+
+	t.Run("reminder_activity localization extracts days", func(t *testing.T) {
+		n := &Notification{
+			Type:    "reminder_activity",
+			Title:   "Activity declaration reminder",
+			Message: "Please declare your project activities for your 3 billable day(s).",
+		}
+		n.Localize(tr)
+		if n.Title != "Rappel activité FR" {
+			t.Errorf("expected localized title, got %q", n.Title)
+		}
+		if n.Message != "Déclarer activités pour 3 jours." {
+			t.Errorf("expected localized message with 3 days, got %q", n.Message)
+		}
+	})
+
+	t.Run("team_added localization formats link and actor", func(t *testing.T) {
+		n := &Notification{
+			Type:      "team_added",
+			Title:     "Team assignment",
+			Message:   "You were added to team Dev by Admin.",
+			Link:      "Dev",
+			ActorName: "Alice",
+		}
+		n.Localize(tr)
+		if n.Title != "Ajout équipe FR" {
+			t.Errorf("expected localized title, got %q", n.Title)
+		}
+		if n.Message != "Ajouté à Dev par Alice." {
+			t.Errorf("expected localized message, got %q", n.Message)
+		}
+	})
+}
+

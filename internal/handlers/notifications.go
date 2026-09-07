@@ -7,7 +7,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/matoy/mypresence/internal/config"
 	"github.com/matoy/mypresence/internal/db"
+	"github.com/matoy/mypresence/internal/i18n"
 	"github.com/matoy/mypresence/internal/metrics"
 	"github.com/matoy/mypresence/internal/middleware"
 	"github.com/matoy/mypresence/internal/models"
@@ -16,6 +18,7 @@ import (
 // NotificationsHandler handles in-app notification endpoints.
 type NotificationsHandler struct {
 	DB     *db.DB
+	Config *config.Config
 	Render func(w http.ResponseWriter, r *http.Request, page string, data interface{})
 }
 
@@ -54,6 +57,16 @@ func (h *NotificationsHandler) GetUnreadNotificationsAPI(w http.ResponseWriter, 
 	if err != nil {
 		jsonError(w, "Failed to fetch notifications", http.StatusInternalServerError)
 		return
+	}
+
+	defaultLang := "en"
+	if h.Config != nil && h.Config.DefaultLang != "" {
+		defaultLang = h.Config.DefaultLang
+	}
+	lang := i18n.LangFromRequest(r, defaultLang)
+	tr := i18n.T(lang)
+	for i := range notifs {
+		notifs[i].Localize(tr)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

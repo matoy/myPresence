@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"io/fs"
 	"log/slog"
@@ -14,6 +15,7 @@ import (
 	"github.com/matoy/mypresence/internal/metrics"
 	"github.com/matoy/mypresence/internal/middleware"
 	"github.com/matoy/mypresence/internal/models"
+	"github.com/matoy/mypresence/internal/reminders"
 )
 
 //go:embed web/templates/*.html
@@ -95,8 +97,11 @@ func buildAppMux(cfg *config.Config, database *db.DB) http.Handler {
 		Render:      renderPage,
 		RateLimiter: middleware.NewLoginRateLimiter(),
 	}
+	remindersService := reminders.NewService(database, cfg)
+	go remindersService.StartWorker(context.Background())
+
 	calHandler := &handlers.CalendarHandler{DB: database, Render: renderPage, DisableFloorplans: cfg.DisableFloorplans, DisableProjects: cfg.DisableProjects}
-	adminHandler := &handlers.AdminHandler{DB: database, Config: cfg, Render: renderPage}
+	adminHandler := &handlers.AdminHandler{DB: database, Config: cfg, Render: renderPage, RemindersService: remindersService}
 	activityHandler := &handlers.ActivityHandler{DB: database, Render: renderPage, DisableProjects: cfg.DisableProjects}
 	holidaysHandler := &handlers.HolidaysHandler{DB: database, Render: renderPage}
 	usersAdminHandler := &handlers.UsersAdminHandler{DB: database, Render: renderPage}
@@ -106,7 +111,7 @@ func buildAppMux(cfg *config.Config, database *db.DB) http.Handler {
 	resetPasswordHandler := &handlers.ResetPasswordHandler{DB: database, Config: cfg, Render: renderPage, RateLimiter: middleware.NewLoginRateLimiter()}
 	patHandler, projectsHandler := initOptionalHandlers(cfg, database, renderPage)
 	newsHandler := &handlers.NewsHandler{DB: database, Render: renderPage}
-	notifHandler := &handlers.NotificationsHandler{DB: database, Render: renderPage}
+	notifHandler := &handlers.NotificationsHandler{DB: database, Config: cfg, Render: renderPage}
 
 	// Initialize SAML if configured
 	if cfg.SAMLEnabled {
@@ -144,8 +149,8 @@ func buildAppMux(cfg *config.Config, database *db.DB) http.Handler {
 	// Metrics endpoint (token-protected)
 	mux.Handle("GET /metrics", metricsHandler(cfg.MetricsToken))
 
-	// Language switcher (public, sets a cookie and redirects back)
-	mux.Handle("POST /set-lang", langSwitcherHandler(cfg.DefaultLang))
+	// Language switcher (public, sets a cookie, persists to user if logged in, and redirects back)
+	mux.Handle("POST /set-lang", middleware.OptionalAuth(database, langSwitcherHandler(cfg.DefaultLang, database)))
 
 	// Auth routes (public)
 	mux.Handle("GET /login", middleware.OptionalAuth(database, http.HandlerFunc(authHandler.LoginPage)))
@@ -214,6 +219,7 @@ func buildAppMux(cfg *config.Config, database *db.DB) http.Handler {
 	teamMux.HandleFunc("DELETE /admin/teams/{id}", adminHandler.DeleteTeam)
 	teamMux.HandleFunc("GET /api/admin/teams/{id}/leaders", adminHandler.GetTeamLeadersAPI)
 	teamMux.HandleFunc("PUT /api/admin/teams/{id}/leaders", adminHandler.SetTeamLeadersAPI)
+	teamMux.HandleFunc("POST /api/admin/teams/{id}/trigger-reminders", adminHandler.TriggerTeamReminders)
 	teamMux.HandleFunc("POST /admin/teams/{id}/members", adminHandler.AddTeamMember)
 	teamMux.HandleFunc("DELETE /admin/teams/{id}/members/{userId}", adminHandler.RemoveTeamMember)
 	teamMux.HandleFunc("PATCH /admin/teams/{id}/members/{userId}/left-at", adminHandler.SetTeamMemberLeftAt)

@@ -231,3 +231,20 @@ func (d *DB) DeleteNotification(id int64) error {
 	_, err := d.core.Exec(dl.rebind(query), id)
 	return err
 }
+
+// HasNotificationToday checks if a notification of a given type was sent to a user since the specified time.
+func (d *DB) HasNotificationToday(userID int64, notifType string, since time.Time) (bool, error) {
+	dl := d.dialect
+	query := `SELECT COUNT(*) FROM notifications WHERE user_id = ? AND type = ? AND created_at >= ?`
+	var arg interface{} = since
+	if dl.isSQLite() {
+		arg = since.UTC().Format("2006-01-02 15:04:05")
+	}
+	var count int
+	err := d.core.QueryRow(dl.rebind(query), userID, notifType, arg).Scan(&count)
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+

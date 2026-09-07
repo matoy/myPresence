@@ -938,6 +938,10 @@ function teamsAdmin(initialTeams, countriesCatalog, allUsers, initialSites) {
         newTeamDomainId: 0,
         newTeamLeaderSearch: '',
         newTeamLeaderIds: [],
+        newTeamRemindPresence: false,
+        newTeamPresenceDays: 3,
+        newTeamRemindActivity: false,
+        newTeamActivityDays: 3,
         createError: '',
         showCreateModal: false,
         filterText: '',
@@ -1074,7 +1078,11 @@ function teamsAdmin(initialTeams, countriesCatalog, allUsers, initialSites) {
                     jira_space_key: this.newTeamJiraKey.trim(),
                     timesheets_managed_manually: this.newTeamManual,
                     require_activity_comment: this.newTeamRequireComment,
-                    domain_id: parseInt(this.newTeamDomainId) || 0
+                    domain_id: parseInt(this.newTeamDomainId) || 0,
+                    remind_presence: this.newTeamRemindPresence,
+                    presence_reminder_days: parseInt(this.newTeamPresenceDays) || 3,
+                    remind_activity: this.newTeamRemindActivity,
+                    activity_reminder_days: parseInt(this.newTeamActivityDays) || 3
                 })
             });
             if (r.ok) {
@@ -1098,7 +1106,7 @@ function teamsAdmin(initialTeams, countriesCatalog, allUsers, initialSites) {
             }
         },
 
-        async saveTeamDetails(id, name, jiraSpaceKey, timesheetsManagedManually, requireActivityComment, domainId, leaderIds) {
+        async saveTeamDetails(id, name, jiraSpaceKey, timesheetsManagedManually, requireActivityComment, domainId, leaderIds, remindPresence, presenceDays, remindActivity, activityDays) {
             await fetch(`/admin/teams/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
@@ -1107,7 +1115,11 @@ function teamsAdmin(initialTeams, countriesCatalog, allUsers, initialSites) {
                     jira_space_key: (jiraSpaceKey || '').trim(),
                     timesheets_managed_manually: !!timesheetsManagedManually,
                     require_activity_comment: !!requireActivityComment,
-                    domain_id: parseInt(domainId) || 0
+                    domain_id: parseInt(domainId) || 0,
+                    remind_presence: !!remindPresence,
+                    presence_reminder_days: parseInt(presenceDays) || 0,
+                    remind_activity: !!remindActivity,
+                    activity_reminder_days: parseInt(activityDays) || 0
                 })
             });
             if (Array.isArray(leaderIds)) {
@@ -1118,6 +1130,30 @@ function teamsAdmin(initialTeams, countriesCatalog, allUsers, initialSites) {
                 });
             }
             window.location.reload();
+        },
+
+        async triggerTeamReminders(teamId, teamName) {
+            const confirmMsg = (_t['teams.trigger_reminders_confirm'] || 'Trigger reminder notifications for this team now?');
+            if (!confirm(confirmMsg)) return;
+            try {
+                const r = await fetch(`/api/admin/teams/${teamId}/trigger-reminders`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                if (r.ok) {
+                    const data = await r.json();
+                    const pCount = data.presence_sent || 0;
+                    const aCount = data.activity_sent || 0;
+                    const tpl = _t['teams.trigger_reminders_result'] || 'Reminders sent: %d presence, %d activity.';
+                    const msg = tpl.replace('%d', pCount).replace('%d', aCount);
+                    alert(msg);
+                } else {
+                    const errData = await r.json().catch(() => ({}));
+                    alert(errData.error || 'Error triggering reminders');
+                }
+            } catch (e) {
+                alert('Network error while triggering reminders');
+            }
         },
 
         async deleteTeam(id) {
@@ -1585,6 +1621,12 @@ function notificationToasts(initialNotifs) {
             if (notif.type === 'team_added' && typeof _t !== 'undefined' && _t['notifications.team_added_title']) {
                 return _t['notifications.team_added_title'];
             }
+            if (notif.type === 'reminder_presence' && typeof _t !== 'undefined' && _t['notifications.reminder_presence_title']) {
+                return _t['notifications.reminder_presence_title'];
+            }
+            if (notif.type === 'reminder_activity' && typeof _t !== 'undefined' && _t['notifications.reminder_activity_title']) {
+                return _t['notifications.reminder_activity_title'];
+            }
             return notif.title || '';
         },
         getMessage(notif) {
@@ -1599,6 +1641,16 @@ function notificationToasts(initialNotifs) {
                         return parts[0] + team + parts[1] + actor + parts[2];
                     }
                 }
+            }
+            if (notif.type === 'reminder_presence' && typeof _t !== 'undefined' && _t['notifications.reminder_presence_msg']) {
+                const match = notif.message ? notif.message.match(/\d+/) : null;
+                const days = match ? match[0] : '1';
+                return _t['notifications.reminder_presence_msg'].replace('%d', days);
+            }
+            if (notif.type === 'reminder_activity' && typeof _t !== 'undefined' && _t['notifications.reminder_activity_msg']) {
+                const match = notif.message ? notif.message.match(/\d+/) : null;
+                const days = match ? match[0] : '1';
+                return _t['notifications.reminder_activity_msg'].replace('%d', days);
             }
             return notif.message || '';
         },

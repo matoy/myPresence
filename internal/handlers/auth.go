@@ -178,6 +178,7 @@ func (h *AuthHandler) LocalLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var userID int64
+	var user *models.User
 
 	if username == h.Config.AdminUser {
 		// Admin credential check (plain-text against config value)
@@ -186,7 +187,8 @@ func (h *AuthHandler) LocalLogin(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, "/login?error=Invalid+credentials", http.StatusSeeOther)
 			return
 		}
-		user, err := h.DB.GetUserByEmail(username)
+		var err error
+		user, err = h.DB.GetUserByEmail(username)
 		if err != nil {
 			recordFailure()
 			http.Redirect(w, r, "/login?error=Internal+error", http.StatusSeeOther)
@@ -195,7 +197,8 @@ func (h *AuthHandler) LocalLogin(w http.ResponseWriter, r *http.Request) {
 		userID = user.ID
 	} else {
 		// Try DB local user with bcrypt-aware comparison
-		user, err := h.DB.GetUserByEmail(username)
+		var err error
+		user, err = h.DB.GetUserByEmail(username)
 		if err != nil || !h.DB.CheckPassword(user.ID, user.PasswordHash, password) {
 			recordFailure()
 			http.Redirect(w, r, "/login?error=Invalid+credentials", http.StatusSeeOther)
@@ -231,6 +234,25 @@ func (h *AuthHandler) LocalLogin(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   86400 * 30,
 	})
+
+	// Synchronize language between cookie and user record
+	if c, err := r.Cookie("lang"); err == nil && c.Value != "" {
+		if user.Language != c.Value {
+			_ = h.DB.UpdateUserLanguage(user.ID, c.Value)
+			user.Language = c.Value
+		}
+	} else if user.Language != "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "lang",
+			Value:    user.Language,
+			Path:     "/",
+			MaxAge:   365 * 24 * 3600,
+			SameSite: http.SameSiteLaxMode,
+			HttpOnly: true,
+			Secure:   r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https",
+		})
+	}
+
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 

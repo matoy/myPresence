@@ -126,3 +126,64 @@ func TestTeamAddMember_GeneratesNotification(t *testing.T) {
 		t.Errorf("expected Link 'Engineering', got %q", n.Link)
 	}
 }
+
+func TestGetUnreadNotificationsAPI_Localization(t *testing.T) {
+	d := newCRUDTestDB(t)
+	h := &NotificationsHandler{DB: d}
+
+	uID, err := d.CreateLocalUser("frenchuser@test.com", "French User", "pass12345")
+	if err != nil {
+		t.Fatalf("CreateLocalUser: %v", err)
+	}
+	uToken, err := d.CreateSession(uID)
+	if err != nil {
+		t.Fatalf("CreateSession: %v", err)
+	}
+
+	_, _ = d.CreateNotification(uID, 0, "reminder_presence", "Presence declaration reminder", "Please declare your presence for the next 5 working day(s).", "/calendar")
+	_, _ = d.CreateNotification(uID, 0, "reminder_activity", "Activity declaration reminder", "Please declare your project activities for your 3 billable day(s).", "/projects")
+
+	// Request with French language cookie
+	req := httptest.NewRequest(http.MethodGet, "/api/notifications/unread", nil)
+	req.AddCookie(&http.Cookie{Name: "session", Value: uToken})
+	req.AddCookie(&http.Cookie{Name: "lang", Value: "fr"})
+	rec := httptest.NewRecorder()
+
+	middleware.Auth(d, http.HandlerFunc(h.GetUnreadNotificationsAPI)).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var notifs []models.Notification
+	if err := json.NewDecoder(rec.Body).Decode(&notifs); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(notifs) != 2 {
+		t.Fatalf("expected 2 notifications, got %d", len(notifs))
+	}
+
+	// First is reminder_activity (newest)
+	if notifs[0].Type == "reminder_activity" {
+		if notifs[0].Title != "Rappel : déclaration d'activité" {
+			t.Errorf("expected French activity title, got %q", notifs[0].Title)
+		}
+		if notifs[0].Message != "Vous avez des déclarations d'activité (projets/tâches) incomplètes sur 3 jour(s) ouvré(s) passé(s)." {
+			t.Errorf("expected French activity message, got %q", notifs[0].Message)
+		}
+	} else {
+		t.Errorf("expected first notif to be reminder_activity, got %s", notifs[0].Type)
+	}
+
+	// Second is reminder_presence
+	if notifs[1].Type == "reminder_presence" {
+		if notifs[1].Title != "Rappel : déclaration de présence" {
+			t.Errorf("expected French presence title, got %q", notifs[1].Title)
+		}
+		if notifs[1].Message != "Pensez à déclarer votre présence pour les 5 prochain(s) jour(s) ouvré(s)." {
+			t.Errorf("expected French presence message, got %q", notifs[1].Message)
+		}
+	} else {
+		t.Errorf("expected second notif to be reminder_presence, got %s", notifs[1].Type)
+	}
+}
+
