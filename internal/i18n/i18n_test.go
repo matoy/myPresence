@@ -149,6 +149,7 @@ func TestProjectsManualKeys_AllLanguages(t *testing.T) {
 		"projects.manual.no_activities_day",
 		"projects.manual.filter_hide_non_billable",
 		"projects.manual.filter_hide_completed",
+		"projects.manual.filter_hide_future",
 		"projects.manual.collapse_all",
 		"projects.manual.expand_all",
 		"projects.manual.unsaved",

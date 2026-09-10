@@ -104,6 +104,17 @@
                 <span>{{index $.T "projects.manual.filter_hide_completed"}}</span>
                 <span x-show="hideCompleted" class="text-[10px] bg-white/20 px-1 py-0.2 rounded-full font-bold">✓</span>
             </button>
+
+            <!-- Filter Future Days -->
+            <button type="button" @click="hideFuture = !hideFuture"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer"
+                    :class="hideFuture ? 'bg-primary text-white border-primary shadow-xs' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'">
+                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                </svg>
+                <span>{{index $.T "projects.manual.filter_hide_future"}}</span>
+                <span x-show="hideFuture" class="text-[10px] bg-white/20 px-1 py-0.2 rounded-full font-bold">✓</span>
+            </button>
         </div>
 
         <!-- Collapse / Expand All button -->
@@ -125,7 +136,7 @@
     </div>
     <div class="space-y-4">
         <template x-for="d in days" :key="d.date">
-            <div x-show="(!hideNonBillable || d.weight > 0) && (!hideCompleted || !isComplete(d))"
+            <div x-show="(!hideNonBillable || d.weight > 0) && (!hideCompleted || !isComplete(d)) && (!hideFuture || !isFuture(d))"
                  class="rounded-xl shadow-sm border transition p-4"
                  :class="d.weight <= 0 ? 'bg-gray-100/70 border-gray-200 text-gray-500' : 'bg-white border-gray-100'">
                 <!-- Day Header with accordion toggle, date, day of week, status -->
@@ -568,6 +579,9 @@ function projectsManualApp(dates, weights, activitiesByDate, jiraEnabled, requir
         };
     });
 
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
     return {
         year: year,
         month: month,
@@ -581,6 +595,12 @@ function projectsManualApp(dates, weights, activitiesByDate, jiraEnabled, requir
         confirmShow: false,
         hideNonBillable: false,
         hideCompleted: false,
+        hideFuture: false,
+        todayStr: todayStr,
+
+        isFuture(d) {
+            return d.date > this.todayStr;
+        },
 
         hasUnsaved(d) {
             if (d.weight <= 0) return false;
